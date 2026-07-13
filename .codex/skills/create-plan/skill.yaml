@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "name": "create-plan",
+  "display_name": "Create Plan",
+  "version": "0.2.0",
+  "library_compatibility": ">=0.1.0 <1.0.0",
+  "status": "experimental",
+  "category": "orchestration",
+  "type": "orchestrator",
+  "owner": "unassigned",
+  "summary": "Transformar mudanças complexas, ambíguas ou de alto risco em plano executável baseado no repositório, com sequência, gates e rollback; não usar para tarefas triviais e locais.",
+  "activation": {
+    "use_when": [
+      "Planejar mudança multifásica, transversal ou de alto risco envolvendo arquitetura, contratos, dados, migração, finanças, segurança, IA, integração, deployment ou rollback."
+    ],
+    "do_not_use_when": [
+      "Não usar automaticamente para typo, renomeação local, mudança cosmética, documentação simples, pergunta conceitual ou correção isolada de baixo risco."
+    ],
+    "trigger_terms": [
+      "create-plan",
+      "create plan",
+      "plano executável",
+      "planejar migração",
+      "planejar rollout"
+    ],
+    "negative_triggers": [
+      "corrigir typo",
+      "renomear variável local",
+      "ajuste cosmético",
+      "lint trivial"
+    ]
+  },
+  "interface": {
+    "required_inputs": [
+      {
+        "name": "request",
+        "description": "Mudança ou problema a planejar."
+      },
+      {
+        "name": "repository_context",
+        "description": "Repositório, sistema ou evidências disponíveis para investigação."
+      },
+      {
+        "name": "constraints",
+        "description": "Limites de escopo, autoridade, segurança e compatibilidade."
+      },
+      {
+        "name": "objective",
+        "description": "Resultado verificável pretendido."
+      },
+      {
+        "name": "known_success_definition",
+        "description": "Critérios de sucesso conhecidos; lacunas podem ser desconhecidos."
+      }
+    ],
+    "optional_inputs": [
+      {
+        "name": "domain_context",
+        "description": "Stack, ADRs, consumidores, finanças, IA, dependências e riscos conhecidos."
+      }
+    ],
+    "outputs": [
+      {
+        "name": "implementation_plan",
+        "description": "Decisão de aplicabilidade e plano proporcional, ordenado, baseado em evidências, com gates, aceite e rollback quando aplicável."
+      }
+    ],
+    "side_effects": []
+  },
+  "execution": {
+    "preconditions": [
+      "Solicitação e contexto inspecionável estão disponíveis.",
+      "Autoridade cobre planejamento, não implementação, salvo pedido separado."
+    ],
+    "workflow": [
+      "Determinar se plano completo, lightweight plan ou execução direta é apropriado.",
+      "Ler instruções e inspecionar estado real antes de formular abordagem.",
+      "Classificar evidências, escopo, restrições, desconhecidos e perguntas bloqueadoras.",
+      "Mapear arquitetura, contratos, dados, dependências, consumidores e invariantes.",
+      "Comparar alternativas e recomendar abordagem proporcional.",
+      "Ordenar implementação, migração, compatibilidade, testes, rollout, observabilidade e rollback.",
+      "Aplicar checklists especializados quando materiais e revisar qualidade."
+    ],
+    "stop_conditions": [
+      "Decisão material ausente muda a abordagem e não pode ser descoberta com leitura segura.",
+      "Ação destrutiva ou ponto de não retorno não possui autoridade ou rollback aceito.",
+      "Conflito com ADR ou obrigação regulatória exige decisão competente."
+    ],
+    "escalation_conditions": [
+      "Escalar somente pergunta bloqueadora, risco irreversível, conflito de autoridade ou conformidade sem fonte.",
+      "Registrar premissas seguras e reversíveis sem confirmação desnecessária."
+    ]
+  },
+  "quality": {
+    "validation_checks": [
+      "Estado atual e arquivos afetados possuem evidência verificável.",
+      "Plano é proporcional, ordenado e contém gates e critérios de aceite.",
+      "Riscos materiais possuem aplicabilidade, mitigação e rollback explícitos.",
+      "Nenhum arquivo, execução, conformidade ou confiança foi inventado."
+    ],
+    "definition_of_done": [
+      "Plano permite execução sem redescobrir decisões materiais.",
+      "Riscos, mitigações, evidências, perguntas bloqueadoras e próxima ação estão explícitos.",
+      "Templates e checklists usados possuem consumidor e seções irrelevantes não foram forçadas."
+    ],
+    "evidence_required": [
+      "Instruções e artefatos relevantes inspecionados.",
+      "Origem dos fatos e limitações da investigação.",
+      "Comandos, contratos ou documentação usados para validar abordagem."
+    ]
+  },
+  "dependencies": {
+    "skills": [],
+    "references": [
+      "references/planning-model.md"
+    ],
+    "tools": [],
+    "scripts": []
+  },
+  "governance": {
+    "created_at": "2026-07-13",
+    "last_reviewed": "2026-07-13",
+    "next_review": "2026-10-13",
+    "deprecated_by": null
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "skill": "create-plan",
+  "version": "0.2.0",
+  "case_files": {
+    "trigger": "trigger-cases.yaml",
+    "non_trigger": "non-trigger-cases.yaml",
+    "behavior": "behavior-cases.yaml"
+  },
+  "rubric": "rubric.md",
+  "required_gates": [
+    "structure",
+    "trigger_coverage",
+    "non_trigger_coverage",
+    "behavior_coverage",
+    "rubric"
+  ]
+}

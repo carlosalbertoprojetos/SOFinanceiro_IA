@@ -1,0 +1,12 @@
+[
+  {"id":"create-plan-non-trigger-001","prompt":"Corrija um typo no README.","expected_activation":false,"rationale":"Correção local e reversível não precisa de plano extenso.","competing_skill":"documentation","tags":["typo","trivial"]},
+  {"id":"create-plan-non-trigger-002","prompt":"Ajuste a cor de uma borda sem mudar comportamento.","expected_activation":false,"rationale":"Mudança cosmética local não exige planejamento multifásico.","competing_skill":"none","tags":["cosmetic","trivial"]},
+  {"id":"create-plan-non-trigger-003","prompt":"Renomeie uma variável local.","expected_activation":false,"rationale":"Refatoração atômica pode ser executada diretamente.","competing_skill":"backend-implementation","tags":["rename","local"]},
+  {"id":"create-plan-non-trigger-004","prompt":"Atualize este comentário para refletir o código.","expected_activation":false,"rationale":"Comentário local não possui dependências materiais.","competing_skill":"documentation","tags":["comment","local"]},
+  {"id":"create-plan-non-trigger-005","prompt":"Troque uma frase nesta mensagem de ajuda.","expected_activation":false,"rationale":"Texto local e reversível não exige plano.","competing_skill":"documentation","tags":["text","local"]},
+  {"id":"create-plan-non-trigger-006","prompt":"Corrija um import não utilizado.","expected_activation":false,"rationale":"Correção isolada de lint é direta.","competing_skill":"code-review","tags":["import","lint"]},
+  {"id":"create-plan-non-trigger-007","prompt":"Altere uma constante interna sem consumidores externos ou efeito persistente.","expected_activation":false,"rationale":"Mudança local de baixo risco não requer plano completo.","competing_skill":"backend-implementation","tags":["constant","local"]},
+  {"id":"create-plan-non-trigger-008","prompt":"Atualize a versão mostrada no README após release já concluído.","expected_activation":false,"rationale":"Sincronização documental simples usa execução direta.","competing_skill":"documentation","tags":["version","docs"]},
+  {"id":"create-plan-non-trigger-009","prompt":"Adicione um teste unitário simples para função pura existente.","expected_activation":false,"rationale":"Teste isolado sem mudança sistêmica não exige plano extenso.","competing_skill":"testing-strategy","tags":["test","isolated"]},
+  {"id":"create-plan-non-trigger-010","prompt":"Corrija espaçamento apontado pelo formatter.","expected_activation":false,"rationale":"Lint trivial é automático e reversível.","competing_skill":"code-review","tags":["lint","trivial"]}
+]

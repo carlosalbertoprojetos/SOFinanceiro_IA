@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Plan"
+  short_description: "Plano executável baseado no repositório"
+  default_prompt: "Use $create-plan para investigar o estado atual e produzir plano proporcional, ordenado e verificável sem alterar código."
