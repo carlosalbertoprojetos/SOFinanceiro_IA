@@ -153,7 +153,7 @@ As Fases 1 a 9 são fatias verticais. Cada uma deve cobrir, conforme aplicável 
 
 **Rollback:** remover o scaffold introduzido pela fase ou reverter seu conjunto isolado de mudanças; não há dados de negócio.
 
-**Estado em 13 de julho de 2026:** **READY_TO_MERGE**, após revisão integral e validação local do conteúdo staged.
+**Estado em 13 de julho de 2026:** **COMMITTED_AND_VALIDATED** no commit `258def6`, após revisão integral e validação local.
 
 **Evidências:**
 
@@ -170,47 +170,19 @@ As Fases 1 a 9 são fatias verticais. Cada uma deve cobrir, conforme aplicável 
 
 **Ponto de parada atendido:** não iniciar a Fase 1 antes de aprovar glossário financeiro, precisão e arredondamento, datas, fonte do saldo, papéis e matriz de autorização.
 
-### Fase 1 — Primeira fatia vertical: conta a pagar no calendário e caixa
+### Fase 1A — Domínio mínimo de contas a pagar
 
-**Objetivo:** entregar um fluxo ponta a ponta que permita criar, consultar, projetar e liquidar uma conta a pagar com segurança e auditoria.
+**Objetivo:** provar o ciclo mínimo e seguro de uma conta a pagar: criar, consultar, editar enquanto aberta, pagar integralmente, estornar e cancelar, sempre com identidade verificável, isolamento multiempresa, autorização e auditoria.
 
-**Precondições:** Fase 0 aprovada; glossário financeiro; moeda/precisão/arredondamento; estados; datas; timezone; saldo-base; papéis e matriz de autorização definidos.
+**Decisão arquitetural:** usar o agregado específico `Payable`; não introduzir `FinancialEntry`, contraparte cadastrada, ledger, eventos ou outbox. O plano normativo e os critérios executáveis estão em `docs/implementation/PHASE-1A-PLAN.md`. O modelo conceitual está em `docs/architecture/FINANCIAL_DOMAIN_MODEL.md` e as decisões em `docs/architecture/decisions/`.
 
-**Banco:** empresa, vínculo/papel, conta financeira, compromisso a pagar, liquidação/estorno e auditoria, com constraints e índices multiempresa revisados.
+**Escopo removido desta fatia:** conta financeira, saldo, calendário e projeção. Esses consumidores serão construídos depois sobre modelos de leitura derivados das fontes oficiais.
 
-**Domínio:** validar dinheiro, datas e transições; impedir alteração destrutiva após liquidação; suportar liquidação parcial apenas se a regra for aprovada nesta fatia — caso contrário, rejeitá-la explicitamente.
+**Precondições:** contrato JWT verificável, mapeamento do principal para usuário interno, membership e matriz de papéis, retenção de auditoria e política monetária/temporal aprovados.
 
-**Serviço:** operações transacionais para criar, editar quando permitido, liquidar e estornar; concorrência e idempotência testadas.
+**Critério de aceite resumido:** o fluxo completo funciona sem duplicidade, alteração destrutiva ou vazamento entre empresas; migration limpa e incremental e todos os gates oficiais passam.
 
-**API:** contratos validados, versionáveis e sempre escopados por empresa; erros previsíveis para estado, permissão e conflito.
-
-**Interface:** formulário de criação, calendário operacional, detalhe, impacto projetado, ação de liquidação/estorno e estados de carregamento, vazio, erro e permissão.
-
-**Autorização:** papéis mínimos para visualizar, criar, editar, liquidar e estornar; casos de IDOR e troca de empresa cobertos.
-
-**Auditoria:** registrar criação, alterações permitidas, liquidação e estorno com ator, empresa, origem, instante e valores relevantes.
-
-**Projeção:** cálculo determinístico do saldo-base mais entradas menos saídas aplicáveis; nesta fatia, a conta a pagar prova o impacto negativo. A classificação de itens incluídos deve ser explícita.
-
-**Testes:** domínio, banco, transação, precisão, arredondamento, datas/timezone, autorização, multiempresa, idempotência, concorrência, API, interface e regressão.
-
-**Documentação:** glossário, estados, fórmulas, contratos, permissões, comandos e limitações.
-
-**Critérios de aceite:**
-
-1. usuário autorizado cria uma conta a pagar na empresa ativa;
-2. usuário de outra empresa não a lê nem altera;
-3. item aparece na data correta do calendário;
-4. projeção mostra fórmula, premissas e impacto exato;
-5. liquidação altera o realizado sem apagar o compromisso;
-6. estorno restaura o efeito por evento compensatório;
-7. auditoria permite reconstruir as operações;
-8. repetição/conflito não duplica liquidação;
-9. todos os gates oficiais passam.
-
-**Ponto de parada:** validar com usuários se calendário, estados e explicação de saldo correspondem ao trabalho real antes de adicionar recebíveis.
-
-**Rollback:** desabilitar a fatia na interface/rota e reverter aplicação sem apagar registros; migrations destrutivas são proibidas. Se ainda não houver dados, reverter migrations somente com procedimento revisado e testado.
+**Rollback:** reverter a aplicação preservando as tabelas e os registros; depois do primeiro dado real, nenhuma down migration destrutiva é permitida.
 
 ### Fase 2 — Contas a receber e previsão bilateral
 
@@ -408,4 +380,6 @@ Antes da Fase 1:
 
 ## 16. Próxima ação
 
-Após autorização explícita, criar o commit isolado da **Fase 0 — Fundação executável**. Antes da Fase 1, aprovar autenticação, enforcement de tenant e as decisões financeiras listadas acima. Nenhum recurso financeiro deve entrar no commit da fundação.
+A Fase 0 já está commitada no commit `258def6`. A revisão arquitetural da Fase 1A está registrada em `docs/architecture/decisions/`, `docs/architecture/FINANCIAL_DOMAIN_MODEL.md` e `docs/implementation/PHASE-1A-PLAN.md`.
+
+Antes de implementar, aprovar a configuração do emissor JWT, o mapeamento do principal para o usuário interno, a retenção da auditoria e o procedimento de backup/restauração. A implementação deve começar pela identidade e pelo contexto de tenant, não pela migration financeira.
