@@ -1,6 +1,6 @@
 # ADR-005 — Identidade, empresa e autorização
 
-- **Status:** Aceito para a Fase 1A, com configuração de emissor como gate de implementação
+- **Status:** Aceito e implementado na Fase 1A.1, com emissor operacional ainda configurável
 - **Data:** 2026-07-13
 
 ## Contexto
@@ -67,13 +67,18 @@ O mapeamento de `(issuer, subject)` para `User` pertence ao adaptador. Se o emis
 
 Testes substituem `IdentityProvider` por implementação in-memory via injeção de dependência no módulo de teste. O adaptador de teste não é registrado no módulo de produção. Runtime de produção proíbe identidade por `X-User-ID`, `X-Company-ID`, token sem assinatura, algoritmo `none` ou segredo padrão.
 
-A escolha do emissor JWT permanece reversível e configurável. Issuer, audience, JWKS/chave e política de rotação precisam ser aprovados antes de iniciar a implementação da autenticação.
+A escolha do emissor JWT permanece reversível e configurável. Issuer, audience e chave pública são obrigatórios; provedor operacional, JWKS e política de rotação precisam ser aprovados antes de produção.
+
+### Nota de implementação da Fase 1A.1
+
+A primeira implementação usa `RS256`, chave pública RSA SPKI configurada localmente, `UserIdentity` para mapear `(issuer, subject)` e consulta direta a `CompanyMembership`. JWKS remoto e escolha de provedor continuam adiados. Detalhes operacionais estão em `docs/architecture/IDENTITY_TENANT_AUTHORIZATION.md`.
 
 ## Consequências
 
 - A API explicita o tenant sem confiar nele.
 - Troca de empresa não depende de sessão mutável no servidor.
 - O domínio não depende de fornecedor comercial.
+- Ausência ou invalidade da configuração JWT impede a inicialização de toda a API, inclusive do health check, evitando operação parcial sem o limite de autenticação.
 - Pode ser necessária uma migration de identidade anterior e separada da financeira.
 
 ## Riscos

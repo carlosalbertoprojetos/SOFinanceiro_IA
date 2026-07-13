@@ -15,6 +15,7 @@
     "typecheck": "corepack pnpm --recursive --if-present typecheck",
     "test": "corepack pnpm --recursive --if-present test",
     "build": "corepack pnpm db:generate && corepack pnpm --recursive --if-present build",
+    "auth:issue-dev-token": "corepack pnpm --filter @sofia/api auth:issue-dev-token",
     "security": "corepack pnpm audit --audit-level moderate",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",

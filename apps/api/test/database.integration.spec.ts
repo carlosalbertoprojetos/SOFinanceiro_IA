@@ -19,6 +19,9 @@ describe("foundational database constraints", () => {
   });
 
   afterAll(async () => {
+    await prisma.userIdentity.deleteMany({
+      where: { userId: { in: userIds } },
+    });
     await prisma.companyMembership.deleteMany({
       where: { companyId: { in: companyIds } },
     });
@@ -73,6 +76,46 @@ describe("foundational database constraints", () => {
     await expect(
       prisma.user.create({
         data: { email, name: "Segundo usuário" },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("scopes external subjects by issuer and prevents duplicate identities", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: `identity-${testRunId}@example.test`,
+        name: "Usuário com identidade externa",
+      },
+    });
+    userIds.push(user.id);
+    const subject = `shared-subject-${testRunId}`;
+
+    await prisma.userIdentity.createMany({
+      data: [
+        {
+          issuer: "https://issuer-a.example.test",
+          subject,
+          userId: user.id,
+        },
+        {
+          issuer: "https://issuer-b.example.test",
+          subject,
+          userId: user.id,
+        },
+      ],
+    });
+
+    await expect(
+      prisma.user.delete({ where: { id: user.id } }),
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.userIdentity.create({
+        data: {
+          issuer: "https://issuer-a.example.test",
+          subject,
+          userId: user.id,
+        },
       }),
     ).rejects.toThrow();
   });

@@ -61,7 +61,12 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        run: |
+          AUTH_JWT_ALGORITHM=RS256 \
+          AUTH_JWT_AUDIENCE=sofia-api \
+          AUTH_JWT_ISSUER=https://auth.ci.sofia.test \
+          AUTH_JWT_PUBLIC_KEY_BASE64="$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | openssl pkey -pubout 2>/dev/null | base64 -w 0)" \
+          pnpm test
 
       - name: Build
         run: pnpm build
