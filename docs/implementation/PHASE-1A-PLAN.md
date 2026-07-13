@@ -4,6 +4,8 @@
 
 Classificação: **full plan**. A fatia afeta identidade, autorização, multiempresa, domínio financeiro, migration, API, interface e rollback. Este documento não autoriza implementação; a execução depende dos gates abaixo.
 
+Estado incremental em 2026-07-13: Fase 1A.1 implementou identidade e tenant; Fase 1A.2 implementa domínio, persistência e cinco endpoints de mutação de contas a pagar. A interface financeira e as demais partes da Fase 1A continuam pendentes; este status não marca toda a fase como concluída.
+
 ## 2. Objetivo observável
 
 Um usuário autenticado e autorizado cria, consulta, edita e cancela uma conta a pagar de sua empresa, registra uma liquidação integral e pode estorná-la sem perda de histórico ou vazamento entre empresas.

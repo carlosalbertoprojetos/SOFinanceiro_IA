@@ -5,6 +5,7 @@ import { AuthModule } from "./auth/auth.module";
 import { validateEnvironment } from "./config/environment";
 import { PrismaModule } from "./database/prisma.module";
 import { HealthModule } from "./health/health.module";
+import { PayablesModule } from "./payables/payables.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HealthModule } from "./health/health.module";
     }),
     PrismaModule,
     AuthModule,
+    PayablesModule,
     HealthModule,
   ],
 })

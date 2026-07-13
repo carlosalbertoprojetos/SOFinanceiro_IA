@@ -12,7 +12,13 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors({
     credentials: false,
-    methods: ["GET"],
+    allowedHeaders: [
+      "Authorization",
+      "Content-Type",
+      "Idempotency-Key",
+      "X-Request-ID",
+    ],
+    methods: ["GET", "PATCH", "POST"],
     origin: config.getOrThrow<string>("WEB_ORIGIN"),
   });
   app.useGlobalPipes(

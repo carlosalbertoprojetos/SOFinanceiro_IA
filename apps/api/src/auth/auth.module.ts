@@ -1,6 +1,5 @@
 import { Module } from "@nestjs/common";
 
-import { AccessCheckController } from "./access-check.controller";
 import { AuthorizationPolicy } from "./authorization-policy";
 import { CompanyAccessGuard } from "./company-access.guard";
 import { CompanyAccessService } from "./company-access.service";
@@ -11,8 +10,15 @@ import { RoleAuthorizationGuard } from "./role-authorization.guard";
 import { TOKEN_VERIFIER } from "./token-verifier";
 
 @Module({
-  controllers: [AccessCheckController],
-  exports: [AuthorizationPolicy, CompanyAccessService, TOKEN_VERIFIER],
+  exports: [
+    AuthorizationPolicy,
+    CompanyAccessGuard,
+    CompanyAccessService,
+    IdentityResolver,
+    JwtAuthenticationGuard,
+    RoleAuthorizationGuard,
+    TOKEN_VERIFIER,
+  ],
   providers: [
     AuthorizationPolicy,
     CompanyAccessGuard,

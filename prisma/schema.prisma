@@ -13,26 +13,53 @@ enum MembershipRole {
   MEMBER
 }
 
+enum PayableStatus {
+  OPEN
+  PAID
+  CANCELED
+}
+
+enum PayableAuditAction {
+  CREATED
+  UPDATED
+  PAID
+  PAYMENT_REVERSED
+  CANCELED
+}
+
+enum IdempotencyOperation {
+  CREATE_PAYABLE
+  PAY_PAYABLE
+  REVERSE_PAYABLE_PAYMENT
+}
+
+enum IdempotencyState {
+  COMPLETED
+}
+
 model Company {
-  id             String              @id @default(uuid()) @db.Uuid
-  name           String              @db.VarChar(160)
-  currencyCode   String              @default("BRL") @db.VarChar(3)
-  timezone       String              @default("America/Sao_Paulo") @db.VarChar(64)
-  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
-  memberships    CompanyMembership[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String              @db.VarChar(160)
+  currencyCode       String              @default("BRL") @db.VarChar(3)
+  timezone           String              @default("America/Sao_Paulo") @db.VarChar(64)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  memberships        CompanyMembership[]
+  payables           Payable[]
+  idempotencyRecords IdempotencyRecord[]
 
   @@index([name])
 }
 
 model User {
-  id             String              @id @default(uuid()) @db.Uuid
-  email          String              @unique @db.VarChar(254)
-  name           String              @db.VarChar(160)
-  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
-  memberships    CompanyMembership[]
-  identities     UserIdentity[]
+  id               String              @id @default(uuid()) @db.Uuid
+  email            String              @unique @db.VarChar(254)
+  name             String              @db.VarChar(160)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+  memberships      CompanyMembership[]
+  identities       UserIdentity[]
+  payablesCanceled Payable[]           @relation("PayableCanceledBy")
 }
 
 model UserIdentity {
@@ -49,16 +76,123 @@ model UserIdentity {
 }
 
 model CompanyMembership {
-  id         String         @id @default(uuid()) @db.Uuid
-  companyId  String         @db.Uuid
-  userId     String         @db.Uuid
-  role       MembershipRole @default(MEMBER)
-  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime       @updatedAt @db.Timestamptz(3)
-  company    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String                   @id @default(uuid()) @db.Uuid
+  companyId               String                   @db.Uuid
+  userId                  String                   @db.Uuid
+  role                    MembershipRole           @default(MEMBER)
+  createdAt               DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime                 @updatedAt @db.Timestamptz(3)
+  company                 Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payablesCreated         Payable[]                @relation("PayableCreatedByMembership")
+  payablesUpdated         Payable[]                @relation("PayableUpdatedByMembership")
+  payablePayments         PayablePayment[]
+  payablePaymentReversals PayablePaymentReversal[]
+  payableAuditEvents      PayableAuditEvent[]
+  idempotencyRecords      IdempotencyRecord[]
 
   @@unique([companyId, userId])
   @@index([companyId])
   @@index([userId])
+}
+
+model Payable {
+  id                  String              @id @default(uuid()) @db.Uuid
+  companyId           String              @db.Uuid
+  payeeName           String              @db.VarChar(160)
+  description         String              @db.VarChar(500)
+  documentNumber      String?             @db.VarChar(100)
+  amount              Decimal             @db.Decimal(19, 2)
+  currencyCode        String              @db.VarChar(3)
+  competenceDate      DateTime            @db.Date
+  dueDate             DateTime            @db.Date
+  status              PayableStatus       @default(OPEN)
+  version             Int                 @default(1)
+  createdByUserId     String              @db.Uuid
+  updatedByUserId     String              @db.Uuid
+  canceledAt          DateTime?           @db.Timestamptz(3)
+  canceledByUserId    String?             @db.Uuid
+  cancellationReason  String?             @db.VarChar(500)
+  createdAt           DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(3)
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  createdByMembership CompanyMembership   @relation("PayableCreatedByMembership", fields: [companyId, createdByUserId], references: [companyId, userId], onDelete: Restrict)
+  updatedByMembership CompanyMembership   @relation("PayableUpdatedByMembership", fields: [companyId, updatedByUserId], references: [companyId, userId], onDelete: Restrict)
+  canceledBy          User?               @relation("PayableCanceledBy", fields: [canceledByUserId], references: [id], onDelete: Restrict)
+  payments            PayablePayment[]
+  auditEvents         PayableAuditEvent[]
+
+  @@unique([companyId, id])
+  @@index([companyId, status, dueDate])
+}
+
+model PayablePayment {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  companyId            String                  @db.Uuid
+  payableId            String                  @db.Uuid
+  amount               Decimal                 @db.Decimal(19, 2)
+  currencyCode         String                  @db.VarChar(3)
+  paidOn               DateTime                @db.Date
+  recordedAt           DateTime                @default(now()) @db.Timestamptz(3)
+  recordedByUserId     String                  @db.Uuid
+  payable              Payable                 @relation(fields: [companyId, payableId], references: [companyId, id], onDelete: Restrict)
+  recordedByMembership CompanyMembership       @relation(fields: [companyId, recordedByUserId], references: [companyId, userId], onDelete: Restrict)
+  reversal             PayablePaymentReversal?
+
+  @@unique([companyId, id])
+  @@index([companyId, payableId, recordedAt])
+}
+
+model PayablePaymentReversal {
+  id                   String            @id @default(uuid()) @db.Uuid
+  companyId            String            @db.Uuid
+  paymentId            String            @db.Uuid
+  reason               String            @db.VarChar(500)
+  reversedAt           DateTime          @default(now()) @db.Timestamptz(3)
+  reversedByUserId     String            @db.Uuid
+  payment              PayablePayment    @relation(fields: [companyId, paymentId], references: [companyId, id], onDelete: Restrict)
+  reversedByMembership CompanyMembership @relation(fields: [companyId, reversedByUserId], references: [companyId, userId], onDelete: Restrict)
+
+  @@unique([companyId, paymentId])
+  @@index([companyId, reversedAt])
+}
+
+model PayableAuditEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  companyId       String             @db.Uuid
+  payableId       String             @db.Uuid
+  actorUserId     String             @db.Uuid
+  action          PayableAuditAction
+  occurredAt      DateTime           @default(now()) @db.Timestamptz(3)
+  requestId       String             @db.VarChar(128)
+  previousVersion Int?
+  newVersion      Int
+  reason          String?            @db.VarChar(500)
+  changes         Json
+  payable         Payable            @relation(fields: [companyId, payableId], references: [companyId, id], onDelete: Restrict)
+  actorMembership CompanyMembership  @relation(fields: [companyId, actorUserId], references: [companyId, userId], onDelete: Restrict)
+
+  @@index([companyId, payableId, occurredAt])
+  @@index([companyId, requestId])
+}
+
+model IdempotencyRecord {
+  id              String               @id @default(uuid()) @db.Uuid
+  companyId       String               @db.Uuid
+  actorUserId     String               @db.Uuid
+  operation       IdempotencyOperation
+  idempotencyKey  String               @db.VarChar(128)
+  payloadHash     String               @db.Char(64)
+  state           IdempotencyState     @default(COMPLETED)
+  httpStatus      Int
+  resourceType    String               @db.VarChar(64)
+  resourceId      String               @db.Uuid
+  response        Json
+  createdAt       DateTime             @default(now()) @db.Timestamptz(3)
+  expiresAt       DateTime             @db.Timestamptz(3)
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  actorMembership CompanyMembership    @relation(fields: [companyId, actorUserId], references: [companyId, userId], onDelete: Restrict)
+
+  @@unique([companyId, actorUserId, operation, idempotencyKey], map: "IdempotencyRecord_scope_key")
+  @@index([expiresAt])
 }

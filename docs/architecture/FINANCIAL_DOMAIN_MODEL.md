@@ -2,7 +2,7 @@
 
 ## 1. Propósito e status
 
-Este documento define o modelo aprovado para a **Fase 1A — domínio mínimo de contas a pagar**. É uma especificação arquitetural: não descreve tabelas, módulos ou APIs já implementados.
+Este documento define o modelo aprovado para a **Fase 1A — domínio mínimo de contas a pagar**. A persistência e a API mínima descritas aqui foram implementadas na Fase 1A.2; interface financeira continua pendente.
 
 Decisões relacionadas:
 
@@ -17,12 +17,11 @@ Decisões relacionadas:
 
 Incluído:
 
-- criar, listar, consultar e editar conta a pagar aberta;
+- criar e editar conta a pagar aberta pelos endpoints mínimos da Fase 1A.2;
 - pagar integralmente;
 - estornar o pagamento sem apagar o original;
 - cancelar conta aberta;
 - autorização, isolamento multiempresa, auditoria e idempotência aplicáveis;
-- interface mínima para o fluxo.
 
 Adiado:
 
@@ -78,7 +77,7 @@ erDiagram
 
 Não existe relação com `Counterparty`, `FinancialEntry`, conta bancária, contrato ou evento de domínio nesta fase.
 
-## 5. Entidades propostas para a migration futura
+## 5. Entidades persistidas na Fase 1A.2
 
 ### `Payable`
 
@@ -133,7 +132,19 @@ Contém empresa, título, ator, ação enumerada, instante, request ID, versões
 
 ### `IdempotencyRecord`
 
-Contém escopo da chave, hash canônico, resultado mínimo e expiração. É infraestrutura transacional, não fato financeiro.
+Contém escopo da chave, hash canônico, resultado mínimo e expiração de sete dias conforme ADR-004. É infraestrutura transacional, não fato financeiro. Não existe job de limpeza; uma chave expirada é substituída transacionalmente quando reutilizada.
+
+## 5.1 Constraints e isolamento persistidos
+
+- `DECIMAL(19,2)`, valor positivo e moeda com três letras maiúsculas;
+- coerência entre `CANCELED` e seus metadados;
+- FKs compostas por `companyId` para pagamento, estorno, auditoria e atores;
+- um estorno por pagamento;
+- chave idempotente única por empresa, ator, operação e chave;
+- `RESTRICT` sobre histórico financeiro;
+- índices tenant-first para estado, vencimento e relações.
+
+`PayablePayment` não possui status mutável. Pagamento ativo é aquele sem `PayablePaymentReversal`, preservando a imutabilidade aprovada no ADR-002.
 
 ## 6. Objeto de valor `Money`
 
@@ -210,7 +221,7 @@ Matriz inicial:
 
 | Operação                   | OWNER | ADMIN | MEMBER |
 | -------------------------- | ----: | ----: | -----: |
-| listar e consultar         |   sim |   sim |    sim |
+| listar e consultar futuros |   sim |   sim |    sim |
 | criar e editar             |   sim |   sim |    não |
 | pagar, estornar e cancelar |   sim |   sim |    não |
 
@@ -248,3 +259,17 @@ Adicionar origem/versionamento de contrato de modo aditivo. Títulos materializa
 - sem contraparte obrigatória;
 - sem simulação misturada a registros reais;
 - sem IA como cálculo ou fonte de verdade.
+
+## 13. Evidências da Fase 1A.2
+
+Validação final executada em 13 de julho de 2026:
+
+- migration aplicada em banco limpo e sobre o schema da Fase 1A.1, sem perda dos registros fundacionais;
+- `prisma migrate status` atualizado e `prisma migrate diff` sem drift;
+- lint e typecheck aprovados;
+- 82 testes da API e 3 testes do frontend aprovados;
+- build da API, frontend e Prisma Client aprovado;
+- auditoria de dependências sem vulnerabilidades conhecidas;
+- `git diff --check` aprovado.
+
+Os testes cobrem dinheiro e datas civis, transições, retries idempotentes, concorrência, rollback transacional, autorização por papel, isolamento multiempresa e constraints do banco. A interface financeira, consultas/listagem, RLS e funcionalidades adiadas na seção 2 permanecem fora desta fase.

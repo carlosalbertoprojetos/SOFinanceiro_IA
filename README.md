@@ -1,6 +1,6 @@
 # Sistema Operacional Financeiro com IA — SOFIA
 
-O SOFIA é uma plataforma para PMEs que organizará compromissos financeiros, antecipará o comportamento do caixa e apoiará decisões rastreáveis. A Fase 0 entrega a fundação executável e a Fase 1A.1 adiciona identidade JWT verificável, tenant e autorização. Nenhum recurso financeiro está implementado.
+O SOFIA é uma plataforma para PMEs que organizará compromissos financeiros, antecipará o comportamento do caixa e apoiará decisões rastreáveis. A Fase 0 entrega a fundação executável, a Fase 1A.1 adiciona identidade JWT verificável, tenant e autorização, e a Fase 1A.2 implementa o domínio e a API mínima de contas a pagar. Não existe interface web financeira.
 
 ## Stack da fundação
 
@@ -53,7 +53,6 @@ pnpm dev
 
 - Frontend: `http://localhost:3000`
 - Health check: `http://localhost:3001/health`
-- Validação técnica protegida e temporária: `GET http://localhost:3001/api/v1/companies/:companyId/access-check` (não integra o contrato permanente da API)
 
 O health check retorna `status: ok` somente quando aplicação e PostgreSQL estão acessíveis. Quando o banco está indisponível, a API responde com HTTP 503 e estado degradado.
 
@@ -112,11 +111,26 @@ corepack pnpm auth:issue-dev-token -- --issuer https://auth.local.sofia.test --a
 
 Copie `publicKeyBase64` para `AUTH_JWT_PUBLIC_KEY_BASE64`. O subject precisa estar previamente associado a um usuário por `UserIdentity`; esta fase não cria endpoint de provisionamento.
 
-## Limitações da Fase 0
+## Contas a pagar — Fase 1A.2
+
+A API recebe dinheiro como string decimal e datas civis em `YYYY-MM-DD`. Moeda e valor do pagamento são definidos pelo servidor. `OWNER` e `ADMIN` podem mutar; `MEMBER` é rejeitado.
+
+Endpoints implementados:
+
+- `POST /api/v1/companies/:companyId/payables`;
+- `PATCH /api/v1/companies/:companyId/payables/:payableId`;
+- `POST /api/v1/companies/:companyId/payables/:payableId/payments`;
+- `POST /api/v1/companies/:companyId/payables/:payableId/payments/:paymentId/reversal`;
+- `POST /api/v1/companies/:companyId/payables/:payableId/cancellation`.
+
+Criação, pagamento e estorno exigem `Idempotency-Key`. Edição e cancelamento exigem `expectedVersion`. Não há `DELETE`, listagem ou frontend financeiro nesta fase.
+
+## Limitações atuais
 
 - não há login, refresh token, revogação, MFA ou provisionamento público de identidade;
 - o tenant é validado no backend, mas ainda não há RLS no PostgreSQL;
-- não há contas a pagar/receber, calendário ou projeção;
+- não há contas a receber, calendário ou projeção;
+- contas a pagar não possuem listagem, frontend, pagamento parcial, parcelas, recorrência, juros, multa, desconto ou conciliação;
 - não há integrações externas, jobs ou IA;
 - os modelos fundacionais não constituem cadastro administrativo público;
 - BRL e `America/Sao_Paulo` são padrões iniciais configuráveis por empresa, não regras financeiras completas.

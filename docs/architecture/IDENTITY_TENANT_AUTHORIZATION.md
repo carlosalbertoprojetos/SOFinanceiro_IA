@@ -94,19 +94,7 @@ O `companyId` é somente uma seleção. O backend exige membership do usuário a
 
 `AllowedRoles` declara papéis autorizados e `RoleAuthorizationGuard` usa `AuthorizationPolicy` sobre o papel atual do banco. Ausência de declaração ou de contexto validado é negada por padrão.
 
-A rota temporária de validação técnica permite `OWNER`, `ADMIN` e `MEMBER`:
-
-```text
-GET /api/v1/companies/:companyId/access-check
-```
-
-Resposta mínima:
-
-```json
-{ "access": "granted", "role": "MEMBER" }
-```
-
-Ela não integra o contrato permanente da API e não retorna usuário, e-mail, membership ou dados da empresa. Deve ser removida quando os primeiros endpoints reais substituírem sua função de validação.
+A rota temporária `access-check` foi removida na Fase 1A.2 quando os primeiros endpoints reais passaram a validar autenticação, tenant e papéis.
 
 ## Token local efêmero
 
@@ -146,5 +134,4 @@ A migration é aditiva. Antes de dados reais, uma base descartável pode ser rec
 - não há provisionamento administrativo de identidade;
 - não há cache de membership nem RLS;
 - `iat` depende de relógios sincronizados;
-- a rota `access-check` é temporária;
 - a seleção do emissor operacional e gestão de chaves continuam decisões de implantação.
