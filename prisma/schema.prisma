@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../apps/api/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Company {
+  id             String              @id @default(uuid()) @db.Uuid
+  name           String              @db.VarChar(160)
+  currencyCode   String              @default("BRL") @db.VarChar(3)
+  timezone       String              @default("America/Sao_Paulo") @db.VarChar(64)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+  memberships    CompanyMembership[]
+
+  @@index([name])
+}
+
+model User {
+  id             String              @id @default(uuid()) @db.Uuid
+  email          String              @unique @db.VarChar(254)
+  name           String              @db.VarChar(160)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+  memberships    CompanyMembership[]
+}
+
+model CompanyMembership {
+  id         String         @id @default(uuid()) @db.Uuid
+  companyId  String         @db.Uuid
+  userId     String         @db.Uuid
+  role       MembershipRole @default(MEMBER)
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime       @updatedAt @db.Timestamptz(3)
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([companyId])
+  @@index([userId])
+}

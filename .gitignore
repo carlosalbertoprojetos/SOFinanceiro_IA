@@ -209,6 +209,28 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Node.js / pnpm
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.next/
+*.tsbuildinfo
+
+# Generated Prisma Client
+apps/api/src/generated/prisma/
+
+# Next.js
+apps/web/next-env.d.ts
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local validation artifacts
+.tmp/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

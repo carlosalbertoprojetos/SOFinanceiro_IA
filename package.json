@@ -1,0 +1,36 @@
+{
+  "name": "sofia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema Operacional Financeiro com IA",
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "corepack pnpm --parallel --filter './apps/*' run dev",
+    "dev:api": "corepack pnpm --filter @sofia/api dev",
+    "dev:web": "corepack pnpm --filter @sofia/web dev",
+    "lint": "eslint apps prisma.config.ts --max-warnings=0 && prettier --check package.json pnpm-workspace.yaml tsconfig.base.json prisma.config.ts apps prisma docker-compose.yml .github README.md docs",
+    "typecheck": "corepack pnpm --recursive --if-present typecheck",
+    "test": "corepack pnpm --recursive --if-present test",
+    "build": "corepack pnpm db:generate && corepack pnpm --recursive --if-present build",
+    "security": "corepack pnpm audit --audit-level moderate",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.10.9",
+    "dotenv": "17.2.3",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.7.0",
+    "prettier": "3.9.5",
+    "prisma": "7.8.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.63.0"
+  }
+}

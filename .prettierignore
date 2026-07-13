@@ -1,0 +1,7 @@
+.codex/
+node_modules/
+dist/
+coverage/
+.next/
+apps/api/src/generated/
+pnpm-lock.yaml

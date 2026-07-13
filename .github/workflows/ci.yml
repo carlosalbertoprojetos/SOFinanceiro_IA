@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: sofia
+          POSTGRES_PASSWORD: sofia_ci
+          POSTGRES_USER: sofia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sofia -d sofia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      API_PORT: 3001
+      DATABASE_URL: postgresql://sofia:sofia_ci@127.0.0.1:5432/sofia?schema=public
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      TZ: America/Sao_Paulo
+      WEB_ORIGIN: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Audit dependencies
+        run: pnpm security
