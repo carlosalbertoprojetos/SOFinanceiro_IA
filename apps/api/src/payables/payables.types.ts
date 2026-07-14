@@ -42,3 +42,29 @@ export type ReversalView = {
   reason: string;
   reversedAt: string;
 };
+
+export type PaymentHistoryView = PaymentView & {
+  reversal: ReversalView | null;
+};
+
+export type PayableReadView = PayableView & {
+  activePayment: PaymentView | null;
+  overdue: boolean;
+  payments: PaymentHistoryView[];
+};
+
+export type PayablePermissions = {
+  canMutate: boolean;
+};
+
+export type PayableListResult = {
+  items: PayableReadView[];
+  nextCursor: string | null;
+  pageSize: number;
+  permissions: PayablePermissions;
+};
+
+export type PayableDetailResult = {
+  payable: PayableReadView;
+  permissions: PayablePermissions;
+};

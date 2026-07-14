@@ -4,12 +4,14 @@ import {
   ConflictException,
   Controller,
   ForbiddenException,
+  Get,
   Headers,
   HttpCode,
   NotFoundException,
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -28,6 +30,7 @@ import {
   PayablesValidationError,
 } from "./payables.errors";
 import type { AuthorizedCommandContext } from "./payables.types";
+import { GetPayable, ListPayables } from "./payables.queries";
 import {
   CancelOpenPayable,
   CreatePayable,
@@ -125,10 +128,63 @@ export class PayablesController {
   constructor(
     private readonly cancelOpenPayable: CancelOpenPayable,
     private readonly createPayable: CreatePayable,
+    private readonly getPayable: GetPayable,
+    private readonly listPayables: ListPayables,
     private readonly payPayable: PayPayable,
     private readonly reversePayment: ReversePayablePayment,
     private readonly updateOpenPayable: UpdateOpenPayable,
   ) {}
+
+  @Get()
+  @AllowedRoles("OWNER", "ADMIN", "MEMBER")
+  async list(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: Record<string, string | undefined>,
+  ): Promise<unknown> {
+    allowedKeys(query, [
+      "cursor",
+      "dueFrom",
+      "dueTo",
+      "overdue",
+      "pageSize",
+      "query",
+      "sort",
+      "status",
+    ]);
+    try {
+      return await this.listPayables.execute(
+        commandContext(request, undefined),
+        {
+          cursor: query.cursor,
+          dueFrom: query.dueFrom,
+          dueTo: query.dueTo,
+          overdue: query.overdue,
+          pageSize: query.pageSize,
+          query: query.query,
+          sort: query.sort,
+          status: query.status,
+        },
+      );
+    } catch (error) {
+      mapError(error);
+    }
+  }
+
+  @Get(":payableId")
+  @AllowedRoles("OWNER", "ADMIN", "MEMBER")
+  async detail(
+    @Req() request: AuthenticatedRequest,
+    @Param("payableId") payableId: string,
+  ): Promise<unknown> {
+    try {
+      return await this.getPayable.execute(
+        commandContext(request, undefined),
+        payableId,
+      );
+    } catch (error) {
+      mapError(error);
+    }
+  }
 
   @Post()
   async create(

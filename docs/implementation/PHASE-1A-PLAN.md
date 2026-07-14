@@ -4,7 +4,7 @@
 
 Classificação: **full plan**. A fatia afeta identidade, autorização, multiempresa, domínio financeiro, migration, API, interface e rollback. Este documento não autoriza implementação; a execução depende dos gates abaixo.
 
-Estado incremental em 2026-07-13: Fase 1A.1 implementou identidade e tenant; Fase 1A.2 implementa domínio, persistência e cinco endpoints de mutação de contas a pagar. A interface financeira e as demais partes da Fase 1A continuam pendentes; este status não marca toda a fase como concluída.
+Estado incremental em 2026-07-13: Fase 1A.1 implementou identidade e tenant; Fase 1A.2 implementou domínio, persistência e cinco endpoints de mutação; Fase 1A.3 implementa consultas e interface mínima de contas a pagar. Calendário, projeção e as demais partes continuam pendentes; este status não marca toda a fase como concluída.
 
 ## 2. Objetivo observável
 

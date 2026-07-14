@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaService } from "../src/database/prisma.service";
 import { todayInTimeZone } from "../src/payables/domain/civil-date";
+import { SofiaApiClient } from "../../web/src/lib/api-client";
 
 describe("payables HTTP contract", () => {
   let app: INestApplication;
@@ -34,7 +35,7 @@ describe("payables HTTP contract", () => {
     options: {
       body?: unknown;
       idempotencyKey?: string;
-      method?: "PATCH" | "POST";
+      method?: "GET" | "PATCH" | "POST";
     } = {},
   ): Promise<Response> {
     return fetch(`${baseUrl}${path}`, {
@@ -135,6 +136,131 @@ describe("payables HTTP contract", () => {
     expect(first.status).toBe(201);
     expect(replay.status).toBe(201);
     expect(await replay.json()).toEqual(await first.json());
+  });
+
+  it("communicates through the real typed frontend client", async () => {
+    const client = new SofiaApiClient(token, baseUrl);
+    const created = await client.create(
+      companyId,
+      { ...createBody, description: "Frontend contract" },
+      "frontend-real-create",
+    );
+    const list = await client.list(
+      companyId,
+      new URLSearchParams("query=Frontend+contract"),
+    );
+    const detail = await client.detail(companyId, created.id);
+
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]?.amount).toBe("250.00");
+    expect(detail.payable.id).toBe(created.id);
+  });
+
+  it("lists an empty company for an authorized member", async () => {
+    const emptyCompany = await prisma.company.create({
+      data: { name: `Empty HTTP ${randomUUID()}` },
+    });
+    await prisma.companyMembership.create({
+      data: { companyId: emptyCompany.id, role: "MEMBER", userId },
+    });
+
+    const response = await request(
+      `/api/v1/companies/${emptyCompany.id}/payables`,
+      { method: "GET" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      items: [],
+      nextCursor: null,
+      permissions: { canMutate: false },
+    });
+    await prisma.companyMembership.delete({
+      where: {
+        companyId_userId: { companyId: emptyCompany.id, userId },
+      },
+    });
+    await prisma.company.delete({ where: { id: emptyCompany.id } });
+  });
+
+  it("filters and paginates with an opaque stable cursor", async () => {
+    for (const [index, dueDate] of ["2020-01-01", "2026-08-02"].entries()) {
+      await request(`/api/v1/companies/${companyId}/payables`, {
+        body: {
+          ...createBody,
+          description: `Cursor ${index}`,
+          dueDate,
+          payeeName: `Filtro Cursor ${index}`,
+        },
+        idempotencyKey: `http-query-cursor-${index}`,
+      });
+    }
+
+    const first = await request(
+      `/api/v1/companies/${companyId}/payables?query=Filtro%20Cursor&pageSize=1&sort=due_asc`,
+      { method: "GET" },
+    );
+    const firstBody = (await first.json()) as {
+      items: Array<{ amount: unknown; dueDate: string; overdue: boolean }>;
+      nextCursor: string;
+    };
+    expect(first.status).toBe(200);
+    expect(firstBody.items).toHaveLength(1);
+    expect(typeof firstBody.items[0]?.amount).toBe("string");
+    expect(firstBody.items[0]?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(firstBody.items[0]?.overdue).toBe(true);
+    expect(firstBody.nextCursor).not.toContain("2020-01-01");
+
+    const second = await request(
+      `/api/v1/companies/${companyId}/payables?query=Filtro%20Cursor&pageSize=1&sort=due_asc&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
+      { method: "GET" },
+    );
+    await expect(second.json()).resolves.toMatchObject({
+      items: [{ dueDate: "2026-08-02", overdue: false }],
+      nextCursor: null,
+    });
+  });
+
+  it("rejects invalid cursor and unsupported filters", async () => {
+    const cursor = await request(
+      `/api/v1/companies/${companyId}/payables?cursor=not-a-cursor`,
+      { method: "GET" },
+    );
+    const status = await request(
+      `/api/v1/companies/${companyId}/payables?status=ARCHIVED`,
+      { method: "GET" },
+    );
+    expect(cursor.status).toBe(400);
+    expect(status.status).toBe(400);
+  });
+
+  it("returns tenant-safe detail without audit or idempotency internals", async () => {
+    const created = await request(`/api/v1/companies/${companyId}/payables`, {
+      body: createBody,
+      idempotencyKey: "http-detail-create",
+    });
+    const payable = (await created.json()) as { id: string };
+    const detail = await request(
+      `/api/v1/companies/${companyId}/payables/${payable.id}`,
+      { method: "GET" },
+    );
+    const body = (await detail.json()) as Record<string, unknown>;
+    expect(detail.status).toBe(200);
+    expect(body).toMatchObject({
+      payable: {
+        activePayment: null,
+        amount: "250.00",
+        payments: [],
+      },
+      permissions: { canMutate: true },
+    });
+    expect(JSON.stringify(body)).not.toMatch(/audit|idempotency|requestId/i);
+
+    const hidden = await request(
+      `/api/v1/companies/${otherCompanyId}/payables/${payable.id}`,
+      { method: "GET" },
+    );
+    expect(hidden.status).toBe(404);
   });
 
   it("rejects mass assignment and client-supplied payment amount", async () => {
@@ -244,6 +370,23 @@ describe("payables HTTP contract", () => {
     expect(canceledResponse.status).toBe(200);
     await expect(canceledResponse.json()).resolves.toMatchObject({
       status: "CANCELED",
+    });
+
+    const detailResponse = await request(
+      `/api/v1/companies/${companyId}/payables/${created.id}`,
+      { method: "GET" },
+    );
+    await expect(detailResponse.json()).resolves.toMatchObject({
+      payable: {
+        cancellationReason: "Título substituído",
+        payments: [
+          {
+            amount: "250.00",
+            reversal: { reason: "Pagamento lançado incorretamente" },
+          },
+        ],
+        status: "CANCELED",
+      },
     });
   });
 });

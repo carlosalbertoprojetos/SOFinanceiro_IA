@@ -1,6 +1,6 @@
 # Sistema Operacional Financeiro com IA — SOFIA
 
-O SOFIA é uma plataforma para PMEs que organizará compromissos financeiros, antecipará o comportamento do caixa e apoiará decisões rastreáveis. A Fase 0 entrega a fundação executável, a Fase 1A.1 adiciona identidade JWT verificável, tenant e autorização, e a Fase 1A.2 implementa o domínio e a API mínima de contas a pagar. Não existe interface web financeira.
+O SOFIA é uma plataforma para PMEs que organizará compromissos financeiros, antecipará o comportamento do caixa e apoiará decisões rastreáveis. A Fase 0 entrega a fundação executável, a Fase 1A.1 adiciona identidade JWT verificável, tenant e autorização, a Fase 1A.2 implementa o domínio e as mutações de contas a pagar e a Fase 1A.3 adiciona consultas e interface mínima.
 
 ## Stack da fundação
 
@@ -117,20 +117,24 @@ A API recebe dinheiro como string decimal e datas civis em `YYYY-MM-DD`. Moeda e
 
 Endpoints implementados:
 
+- `GET /api/v1/companies/:companyId/payables`;
+- `GET /api/v1/companies/:companyId/payables/:payableId`;
 - `POST /api/v1/companies/:companyId/payables`;
 - `PATCH /api/v1/companies/:companyId/payables/:payableId`;
 - `POST /api/v1/companies/:companyId/payables/:payableId/payments`;
 - `POST /api/v1/companies/:companyId/payables/:payableId/payments/:paymentId/reversal`;
 - `POST /api/v1/companies/:companyId/payables/:payableId/cancellation`.
 
-Criação, pagamento e estorno exigem `Idempotency-Key`. Edição e cancelamento exigem `expectedVersion`. Não há `DELETE`, listagem ou frontend financeiro nesta fase.
+Criação, pagamento e estorno exigem `Idempotency-Key`. Edição e cancelamento exigem `expectedVersion`. Não há `DELETE`.
+
+A interface mínima está em `/companies/:companyId/payables`. Enquanto não existe login operacional, ela recebe um JWT válido e o mantém somente em memória. `MEMBER` consulta; `OWNER` e `ADMIN` também executam as mutações previstas. Consulte [o contrato da API e da interface](docs/architecture/PAYABLES_API.md).
 
 ## Limitações atuais
 
 - não há login, refresh token, revogação, MFA ou provisionamento público de identidade;
 - o tenant é validado no backend, mas ainda não há RLS no PostgreSQL;
 - não há contas a receber, calendário ou projeção;
-- contas a pagar não possuem listagem, frontend, pagamento parcial, parcelas, recorrência, juros, multa, desconto ou conciliação;
+- contas a pagar não possuem pagamento parcial, parcelas, recorrência, juros, multa, desconto ou conciliação;
 - não há integrações externas, jobs ou IA;
 - os modelos fundacionais não constituem cadastro administrativo público;
 - BRL e `America/Sao_Paulo` são padrões iniciais configuráveis por empresa, não regras financeiras completas.

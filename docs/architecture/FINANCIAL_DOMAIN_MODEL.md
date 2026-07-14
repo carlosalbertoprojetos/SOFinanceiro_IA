@@ -2,7 +2,7 @@
 
 ## 1. Propósito e status
 
-Este documento define o modelo aprovado para a **Fase 1A — domínio mínimo de contas a pagar**. A persistência e a API mínima descritas aqui foram implementadas na Fase 1A.2; interface financeira continua pendente.
+Este documento define o modelo aprovado para a **Fase 1A — domínio mínimo de contas a pagar**. A persistência e as mutações foram implementadas na Fase 1A.2; consultas e interface mínima foram implementadas na Fase 1A.3.
 
 Decisões relacionadas:
 
@@ -221,7 +221,7 @@ Matriz inicial:
 
 | Operação                   | OWNER | ADMIN | MEMBER |
 | -------------------------- | ----: | ----: | -----: |
-| listar e consultar futuros |   sim |   sim |    sim |
+| listar e consultar         |   sim |   sim |    sim |
 | criar e editar             |   sim |   sim |    não |
 | pagar, estornar e cancelar |   sim |   sim |    não |
 
