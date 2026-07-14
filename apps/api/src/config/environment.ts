@@ -1,30 +1,43 @@
 import { z } from "zod";
 
-function isBase64EncodedPublicKey(value: string): boolean {
-  try {
-    const publicKey = Buffer.from(value, "base64").toString("utf8");
-    return (
-      publicKey.startsWith("-----BEGIN PUBLIC KEY-----") &&
-      publicKey.trimEnd().endsWith("-----END PUBLIC KEY-----")
-    );
-  } catch {
-    return false;
-  }
-}
-
-const environmentSchema = z.object({
-  API_PORT: z.coerce.number().int().positive().max(65535).default(3001),
-  AUTH_JWT_ALGORITHM: z.literal("RS256").default("RS256"),
-  AUTH_JWT_AUDIENCE: z.string().min(1),
-  AUTH_JWT_ISSUER: z.string().url(),
-  AUTH_JWT_PUBLIC_KEY_BASE64: z
-    .string()
-    .min(1)
-    .refine(isBase64EncodedPublicKey, "must encode a PEM public key"),
-  DATABASE_URL: z.string().url().startsWith("postgresql://"),
-  TZ: z.string().min(1).default("America/Sao_Paulo"),
-  WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
-});
+const environmentSchema = z
+  .object({
+    API_PORT: z.coerce.number().int().positive().max(65535).default(3001),
+    AUTH0_AUDIENCE: z.string().min(1).optional(),
+    AUTH0_ISSUER: z.string().url().optional(),
+    AUTH0_JWKS_CACHE_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(600),
+    AUTH0_JWKS_STALE_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3600),
+    DATABASE_URL: z.string().url().startsWith("postgresql://"),
+    NODE_ENV: z
+      .enum(["development", "production", "test"])
+      .default("development"),
+    TZ: z.string().min(1).default("America/Sao_Paulo"),
+    WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
+  })
+  .refine(
+    (value) => Boolean(value.AUTH0_AUDIENCE) === Boolean(value.AUTH0_ISSUER),
+    "AUTH0_AUDIENCE and AUTH0_ISSUER must be configured together",
+  )
+  .refine(
+    (value) =>
+      !value.AUTH0_ISSUER ||
+      value.NODE_ENV !== "production" ||
+      new URL(value.AUTH0_ISSUER).protocol === "https:",
+    "AUTH0_ISSUER must use HTTPS in production",
+  )
+  .refine(
+    (value) =>
+      value.AUTH0_JWKS_STALE_TTL_SECONDS >= value.AUTH0_JWKS_CACHE_TTL_SECONDS,
+    "AUTH0_JWKS_STALE_TTL_SECONDS must be greater than or equal to cache TTL",
+  );
 
 export type Environment = z.infer<typeof environmentSchema>;
 

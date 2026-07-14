@@ -1,27 +1,37 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 
+import { TOKEN_VERIFIER, type TokenVerifier } from "../auth/token-verifier";
 import { PrismaService } from "../database/prisma.service";
-import type { HealthResult } from "./health.types";
+import type { LivenessResult, ReadinessResult } from "./health.types";
 
 @Injectable()
 export class HealthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
+  ) {}
 
-  async check(): Promise<HealthResult> {
+  live(): LivenessResult {
+    return { service: "api", status: "ok" };
+  }
+
+  async ready(): Promise<ReadinessResult> {
+    const authentication = this.verifier.readiness();
+    let database: ReadinessResult["database"] = { status: "up" };
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-
-      return {
-        database: { status: "up" },
-        service: "api",
-        status: "ok",
-      };
     } catch {
-      return {
-        database: { status: "down" },
-        service: "api",
-        status: "degraded",
-      };
+      database = { status: "down" };
     }
+
+    const ready = authentication.configured && database.status === "up";
+    return {
+      authentication: authentication.configured
+        ? { status: "up" }
+        : { reason: authentication.reason, status: "down" },
+      database,
+      service: "api",
+      status: ready ? "ok" : "degraded",
+    };
   }
 }

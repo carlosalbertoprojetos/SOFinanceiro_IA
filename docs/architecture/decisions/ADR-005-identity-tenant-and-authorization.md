@@ -1,6 +1,6 @@
 # ADR-005 — Identidade, empresa e autorização
 
-- **Status:** Aceito e implementado na Fase 1A.1, com emissor operacional ainda configurável
+- **Status:** Aceito e implementado na Fase 1A.1; autenticação operacional atualizada pelo ADR-007
 - **Data:** 2026-07-13
 
 ## Contexto
@@ -78,7 +78,7 @@ A primeira implementação usa `RS256`, chave pública RSA SPKI configurada loca
 - A API explicita o tenant sem confiar nele.
 - Troca de empresa não depende de sessão mutável no servidor.
 - O domínio não depende de fornecedor comercial.
-- Ausência ou invalidade da configuração JWT impede a inicialização de toda a API, inclusive do health check, evitando operação parcial sem o limite de autenticação.
+- A decisão original de impedir a inicialização integral sem configuração JWT foi substituída pelo ADR-007: liveness permanece disponível, readiness falha e rotas protegidas continuam fechadas.
 - Pode ser necessária uma migration de identidade anterior e separada da financeira.
 
 ## Riscos

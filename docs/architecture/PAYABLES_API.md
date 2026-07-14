@@ -31,7 +31,7 @@ Auditoria, idempotência, atores internos, headers e detalhes do banco não são
 
 ## Interface e segurança
 
-O token é informado pelo usuário e mantido somente na memória da aba. Não existe token hardcoded, cookie improvisado, `localStorage` ou `sessionStorage`. A empresa é explícita na URL. Ausência de login operacional continua limitação conhecida.
+A autenticação usa sessão Auth0 server-side no Next.js. O navegador chama o BFF same-origin, que anexa o access token somente no servidor. Não existe campo manual, token hardcoded, `localStorage` ou `sessionStorage`. A empresa continua explícita na URL e validada pelo NestJS.
 
 Criação, pagamento e estorno mantêm uma `Idempotency-Key` por tentativa lógica. Edição usa `expectedVersion`. Pagamento não recebe valor. Estorno preserva o pagamento. Cancelamento preserva o título. `MEMBER` recebe interface somente leitura; o backend continua sendo autoridade.
 
@@ -39,7 +39,7 @@ Erros `401`, `403`, `404`, `409`, validação, timeout, rede e indisponibilidade
 
 ## Health checks
 
-A separação em `/health/live` e `/health/ready` não foi incorporada à Fase 1A.3. Fazer liveness iniciar sem configuração JWT conflita com o fail-fast explicitamente aprovado na Fase 1A.1 e exigiria separar bootstrap/configuração como subfatia operacional. `/health` permanece readiness atual, dependente da configuração válida no bootstrap e do banco durante a verificação. Nenhum segredo é retornado.
+`/health/live` não depende de banco ou Auth0. `/health/ready` verifica banco e configuração local do verifier, sem consultar Auth0 em toda chamada. Configuração OIDC ausente mantém liveness, retorna readiness `503` e deixa rotas protegidas fechadas, conforme ADR-007.
 
 ## Rollback
 

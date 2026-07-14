@@ -1,9 +1,10 @@
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { exportSPKI, generateKeyPair, SignJWT, type KeyLike } from "jose";
+import { exportJWK, generateKeyPair, SignJWT, type KeyLike } from "jose";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { PrismaService } from "../src/database/prisma.service";
 import { todayInTimeZone } from "../src/payables/domain/civil-date";
@@ -14,11 +15,12 @@ describe("payables HTTP contract", () => {
   let baseUrl: string;
   let companyId: string;
   let otherCompanyId: string;
+  let oidcServer: Server;
   let privateKey: KeyLike;
   let prisma: PrismaService;
   let token: string;
   let userId: string;
-  const issuer = "https://auth.payables-http.example.test";
+  let issuer: string;
   const audience = "sofia-api";
   const subject = `payables-http-${randomUUID()}`;
 
@@ -56,12 +58,29 @@ describe("payables HTTP contract", () => {
   beforeAll(async () => {
     const keyPair = await generateKeyPair("RS256");
     privateKey = keyPair.privateKey;
-    const publicKey = await exportSPKI(keyPair.publicKey);
-    process.env.AUTH_JWT_ALGORITHM = "RS256";
-    process.env.AUTH_JWT_AUDIENCE = audience;
-    process.env.AUTH_JWT_ISSUER = issuer;
-    process.env.AUTH_JWT_PUBLIC_KEY_BASE64 =
-      Buffer.from(publicKey).toString("base64");
+    const publicKey = {
+      ...(await exportJWK(keyPair.publicKey)),
+      kid: "http-key",
+    };
+    oidcServer = createServer((request, response) => {
+      response.setHeader("Content-Type", "application/json");
+      if (request.url === "/.well-known/openid-configuration") {
+        response.end(
+          JSON.stringify({
+            issuer,
+            jwks_uri: `${issuer}.well-known/jwks.json`,
+          }),
+        );
+        return;
+      }
+      response.end(JSON.stringify({ keys: [publicKey] }));
+    });
+    await new Promise<void>((resolve) =>
+      oidcServer.listen(0, "127.0.0.1", resolve),
+    );
+    issuer = `http://127.0.0.1:${(oidcServer.address() as AddressInfo).port}/`;
+    process.env.AUTH0_AUDIENCE = audience;
+    process.env.AUTH0_ISSUER = issuer;
 
     const { AppModule } = await import("../src/app.module");
     app = await NestFactory.create(AppModule, {
@@ -96,7 +115,7 @@ describe("payables HTTP contract", () => {
 
     const now = Math.floor(Date.now() / 1000);
     token = await new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setProtectedHeader({ alg: "RS256", kid: "http-key", typ: "JWT" })
       .setIssuer(issuer)
       .setSubject(subject)
       .setAudience(audience)
@@ -120,6 +139,36 @@ describe("payables HTTP contract", () => {
       });
     }
     await app?.close();
+    await new Promise<void>((resolve, reject) =>
+      oidcServer?.close((error) => (error ? reject(error) : resolve())),
+    );
+  });
+
+  it("lists only companies and current roles from the authenticated user's memberships", async () => {
+    const response = await request("/api/v1/me/companies", { method: "GET" });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      companies: [expect.objectContaining({ id: companyId, role: "OWNER" })],
+    });
+  });
+
+  it("returns the explicit state for an authenticated identity not provisioned", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const unprovisioned = await new SignJWT({})
+      .setProtectedHeader({ alg: "RS256", kid: "http-key", typ: "JWT" })
+      .setIssuer(issuer)
+      .setSubject(`unprovisioned-${randomUUID()}`)
+      .setAudience(audience)
+      .setIssuedAt(now)
+      .setExpirationTime(now + 300)
+      .sign(privateKey);
+    const response = await fetch(`${baseUrl}/api/v1/me/companies`, {
+      headers: { Authorization: `Bearer ${unprovisioned}` },
+    });
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "IDENTITY_NOT_PROVISIONED",
+    });
   });
 
   it("creates and replays the same minimal response for OWNER", async () => {
@@ -139,21 +188,34 @@ describe("payables HTTP contract", () => {
   });
 
   it("communicates through the real typed frontend client", async () => {
-    const client = new SofiaApiClient(token, baseUrl);
-    const created = await client.create(
-      companyId,
-      { ...createBody, description: "Frontend contract" },
-      "frontend-real-create",
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      (input: string | URL | Request, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        headers.set("Authorization", `Bearer ${token}`);
+        return realFetch(input, { ...init, headers });
+      },
     );
-    const list = await client.list(
-      companyId,
-      new URLSearchParams("query=Frontend+contract"),
-    );
-    const detail = await client.detail(companyId, created.id);
+    try {
+      const client = new SofiaApiClient(baseUrl);
+      const created = await client.create(
+        companyId,
+        { ...createBody, description: "Frontend contract" },
+        "frontend-real-create",
+      );
+      const list = await client.list(
+        companyId,
+        new URLSearchParams("query=Frontend+contract"),
+      );
+      const detail = await client.detail(companyId, created.id);
 
-    expect(list.items).toHaveLength(1);
-    expect(list.items[0]?.amount).toBe("250.00");
-    expect(detail.payable.id).toBe(created.id);
+      expect(list.items).toHaveLength(1);
+      expect(list.items[0]?.amount).toBe("250.00");
+      expect(detail.payable.id).toBe(created.id);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("lists an empty company for an authorized member", async () => {

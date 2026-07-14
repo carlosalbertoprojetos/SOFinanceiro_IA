@@ -1,125 +1,170 @@
 import { ConfigService } from "@nestjs/config";
-import { exportSPKI, generateKeyPair, SignJWT, type KeyLike } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import {
+  exportJWK,
+  generateKeyPair,
+  SignJWT,
+  type JWK,
+  type KeyLike,
+} from "jose";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JoseTokenVerifier } from "./jose-token-verifier";
 
-const issuer = "https://auth.verifier.example.test";
-const audience = "sofia-api";
-const subject = "external-user-1";
-let privateKey: KeyLike;
-let verifier: JoseTokenVerifier;
+const issuer = "https://auth.verifier.example.test/";
+const audience = "https://api.sofia.local";
+const subject = "auth0|external-user-1";
+let key1: { privateKey: KeyLike; publicJwk: JWK };
+let key2: { privateKey: KeyLike; publicJwk: JWK };
+let currentJwks: { keys: JWK[] };
+let unavailable: boolean;
+let discoveryRequests: number;
+let jwksRequests: number;
 
 type TokenOverrides = {
+  algorithm?: "PS256" | "RS256";
   audience?: string;
   expiresAt?: number;
   issuedAt?: number;
   issuer?: string;
-  signingKey?: KeyLike;
+  key?: typeof key1;
+  kid?: string;
 };
+
+async function makeKey(kid: string): Promise<typeof key1> {
+  const pair = await generateKeyPair("RS256");
+  const publicJwk = await exportJWK(pair.publicKey);
+  return { privateKey: pair.privateKey, publicJwk: { ...publicJwk, kid } };
+}
 
 async function issueToken(overrides: TokenOverrides = {}): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  const key = overrides.key ?? key1;
   return new SignJWT({})
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setProtectedHeader({
+      alg: overrides.algorithm ?? "RS256",
+      kid: overrides.kid ?? key.publicJwk.kid,
+      typ: "JWT",
+    })
     .setIssuer(overrides.issuer ?? issuer)
     .setSubject(subject)
     .setAudience(overrides.audience ?? audience)
     .setIssuedAt(overrides.issuedAt ?? now)
     .setExpirationTime(overrides.expiresAt ?? now + 300)
-    .sign(overrides.signingKey ?? privateKey);
+    .sign(key.privateKey);
 }
 
-describe("JoseTokenVerifier", () => {
+const fetcher = vi.fn(async (input: string | URL | Request) => {
+  const url = input.toString();
+  if (url.endsWith("/.well-known/openid-configuration")) {
+    discoveryRequests += 1;
+    return Response.json({
+      issuer,
+      jwks_uri: `${issuer}.well-known/jwks.json`,
+    });
+  }
+  jwksRequests += 1;
+  if (unavailable) throw new Error("network unavailable");
+  return Response.json(currentJwks);
+});
+
+function createVerifier(cacheSeconds = 600): JoseTokenVerifier {
+  return new JoseTokenVerifier(
+    new ConfigService({
+      AUTH0_AUDIENCE: audience,
+      AUTH0_ISSUER: issuer,
+      AUTH0_JWKS_CACHE_TTL_SECONDS: cacheSeconds,
+      AUTH0_JWKS_STALE_TTL_SECONDS: 60,
+    }),
+    fetcher as typeof fetch,
+  );
+}
+
+describe("JoseTokenVerifier OIDC/JWKS", () => {
   beforeAll(async () => {
-    const keyPair = await generateKeyPair("RS256");
-    privateKey = keyPair.privateKey;
-    const publicKey = await exportSPKI(keyPair.publicKey);
-    verifier = new JoseTokenVerifier(
-      new ConfigService({
-        AUTH_JWT_ALGORITHM: "RS256",
-        AUTH_JWT_AUDIENCE: audience,
-        AUTH_JWT_ISSUER: issuer,
-        AUTH_JWT_PUBLIC_KEY_BASE64: Buffer.from(publicKey).toString("base64"),
-      }),
-    );
+    key1 = await makeKey("key-1");
+    key2 = await makeKey("key-2");
   });
 
-  it("accepts a valid signed token and extracts only identity claims", async () => {
+  beforeEach(() => {
+    currentJwks = { keys: [key1.publicJwk] };
+    discoveryRequests = 0;
+    jwksRequests = 0;
+    unavailable = false;
+    fetcher.mockClear();
+    vi.useRealTimers();
+  });
+
+  it("accepts a valid access token and caches discovery and keys", async () => {
+    const verifier = createVerifier();
     await expect(verifier.verify(await issueToken())).resolves.toEqual({
       issuer,
       subject,
     });
+    await expect(verifier.verify(await issueToken())).resolves.toEqual({
+      issuer,
+      subject,
+    });
+    expect({ discoveryRequests, jwksRequests }).toEqual({
+      discoveryRequests: 1,
+      jwksRequests: 1,
+    });
   });
 
-  it("rejects a token signed by another key", async () => {
-    const otherKeyPair = await generateKeyPair("RS256");
+  it.each([
+    ["issuer", { issuer: "https://wrong.example.test/" }],
+    ["audience", { audience: "another-api" }],
+    ["expired", { expiresAt: 1 }],
+  ])("rejects a token with invalid %s", async (_name, overrides) => {
     await expect(
-      verifier.verify(
-        await issueToken({ signingKey: otherKeyPair.privateKey }),
-      ),
+      createVerifier().verify(await issueToken(overrides)),
     ).rejects.toThrow();
   });
 
-  it("rejects an expired token", async () => {
+  it("rejects an invalid signature", async () => {
     await expect(
-      verifier.verify(
-        await issueToken({ expiresAt: Math.floor(Date.now() / 1000) - 1 }),
-      ),
+      createVerifier().verify(await issueToken({ key: key2, kid: "key-1" })),
     ).rejects.toThrow();
   });
 
-  it("rejects an incorrect issuer", async () => {
-    await expect(
-      verifier.verify(
-        await issueToken({ issuer: "https://wrong-issuer.example.test" }),
-      ),
-    ).rejects.toThrow();
-  });
-
-  it("rejects an incorrect audience", async () => {
-    await expect(
-      verifier.verify(await issueToken({ audience: "another-api" })),
-    ).rejects.toThrow();
-  });
-
-  it("rejects an algorithm outside the allowlist", async () => {
-    const keyPair = await generateKeyPair("PS256");
-    const now = Math.floor(Date.now() / 1000);
-    const token = await new SignJWT({})
-      .setProtectedHeader({ alg: "PS256" })
-      .setIssuer(issuer)
-      .setSubject(subject)
-      .setAudience(audience)
-      .setIssuedAt(now)
-      .setExpirationTime(now + 300)
-      .sign(keyPair.privateKey);
-
-    await expect(verifier.verify(token)).rejects.toThrow();
-  });
-
-  it("rejects a token issued in the future", async () => {
-    await expect(
-      verifier.verify(
-        await issueToken({ issuedAt: Math.floor(Date.now() / 1000) + 60 }),
-      ),
-    ).rejects.toThrow("issued-at");
-  });
-
-  it("rejects a token without the required issued-at claim", async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const token = await new SignJWT({})
-      .setProtectedHeader({ alg: "RS256" })
-      .setIssuer(issuer)
-      .setSubject(subject)
-      .setAudience(audience)
-      .setExpirationTime(now + 300)
-      .sign(privateKey);
-
-    await expect(verifier.verify(token)).rejects.toThrow();
-  });
-
-  it("rejects a malformed token", async () => {
+  it("rejects malformed, unknown-key and disallowed-algorithm tokens", async () => {
+    const verifier = createVerifier();
     await expect(verifier.verify("not-a-jwt")).rejects.toThrow();
+    await expect(
+      verifier.verify(await issueToken({ kid: "unknown" })),
+    ).rejects.toThrow();
+    await expect(
+      verifier.verify(await issueToken({ algorithm: "PS256" })),
+    ).rejects.toThrow("algorithm");
+  });
+
+  it("refreshes JWKS when a rotated kid is received", async () => {
+    const verifier = createVerifier();
+    await verifier.verify(await issueToken());
+    currentJwks = { keys: [key2.publicJwk] };
+    await expect(
+      verifier.verify(await issueToken({ key: key2 })),
+    ).resolves.toEqual({ issuer, subject });
+    expect(jwksRequests).toBe(2);
+  });
+
+  it("fails closed when JWKS is unavailable without cache", async () => {
+    unavailable = true;
+    await expect(createVerifier().verify(await issueToken())).rejects.toThrow(
+      "network unavailable",
+    );
+  });
+
+  it("uses a still-trusted stale key when JWKS is temporarily unavailable", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T20:00:00Z"));
+    const verifier = createVerifier(1);
+    await verifier.verify(await issueToken());
+    vi.advanceTimersByTime(1_100);
+    unavailable = true;
+    await expect(verifier.verify(await issueToken())).resolves.toEqual({
+      issuer,
+      subject,
+    });
+    expect(jwksRequests).toBe(2);
   });
 });

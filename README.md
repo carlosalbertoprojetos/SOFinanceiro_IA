@@ -32,7 +32,7 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-Copie também a configuração JWT de `.env.example`. A API exige issuer, audience e uma chave pública RSA válida para iniciar. Sem essa configuração, a validação global falha e impede a inicialização de toda a API, inclusive do health check. Este comportamento fail-fast é intencional: a aplicação não opera parcialmente sem o limite de autenticação configurado.
+Preencha a configuração Auth0 somente no `.env` não versionado. Sem issuer e audience, a API inicia apenas para liveness: readiness fica degradada e toda rota protegida falha fechada. O Next.js também exige os segredos Auth0 server-side para login e sessão.
 
 Se o ambiente não permitir instalar o shim do Corepack, execute os mesmos comandos como `corepack pnpm <comando>`. O projeto continua usando a versão fixada no campo `packageManager`.
 
@@ -52,27 +52,28 @@ pnpm dev
 ```
 
 - Frontend: `http://localhost:3000`
-- Health check: `http://localhost:3001/health`
+- Liveness: `http://localhost:3001/health/live`
+- Readiness: `http://localhost:3001/health/ready`
 
-O health check retorna `status: ok` somente quando aplicação e PostgreSQL estão acessíveis. Quando o banco está indisponível, a API responde com HTTP 503 e estado degradado.
+Liveness comprova o processo sem dependências. Readiness retorna `status: ok` somente com PostgreSQL e configuração OIDC disponíveis; caso contrário responde `503`. Rotas protegidas sempre falham fechadas sem OIDC válido.
 
 ## Comandos oficiais
 
-| Comando                            | Finalidade                                                          |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `pnpm dev`                         | Inicia API e frontend em modo de desenvolvimento.                   |
-| `pnpm dev:api`                     | Inicia somente a API.                                               |
-| `pnpm dev:web`                     | Inicia somente o frontend.                                          |
-| `pnpm lint`                        | Executa ESLint estrito e verificação de formatação.                 |
-| `pnpm typecheck`                   | Executa TypeScript sem emissão.                                     |
-| `pnpm test`                        | Executa testes de API, banco e frontend. Requer PostgreSQL migrado. |
-| `pnpm build`                       | Gera o Prisma Client e compila as aplicações.                       |
-| `pnpm auth:issue-dev-token -- ...` | Gera token e chave pública efêmeros somente para desenvolvimento.   |
-| `pnpm security`                    | Verifica vulnerabilidades moderadas, altas e críticas.              |
-| `pnpm db:up`                       | Inicia o PostgreSQL local.                                          |
-| `pnpm db:down`                     | Encerra a infraestrutura local sem remover o volume.                |
-| `pnpm db:generate`                 | Gera o Prisma Client.                                               |
-| `pnpm db:migrate`                  | Aplica migrations versionadas.                                      |
+| Comando                          | Finalidade                                                          |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `pnpm dev`                       | Inicia API e frontend em modo de desenvolvimento.                   |
+| `pnpm dev:api`                   | Inicia somente a API.                                               |
+| `pnpm dev:web`                   | Inicia somente o frontend.                                          |
+| `pnpm lint`                      | Executa ESLint estrito e verificação de formatação.                 |
+| `pnpm typecheck`                 | Executa TypeScript sem emissão.                                     |
+| `pnpm test`                      | Executa testes de API, banco e frontend. Requer PostgreSQL migrado. |
+| `pnpm build`                     | Gera o Prisma Client e compila as aplicações.                       |
+| `pnpm auth:link-identity -- ...` | Vincula issuer + subject a usuário interno existente.               |
+| `pnpm security`                  | Verifica vulnerabilidades moderadas, altas e críticas.              |
+| `pnpm db:up`                     | Inicia o PostgreSQL local.                                          |
+| `pnpm db:down`                   | Encerra a infraestrutura local sem remover o volume.                |
+| `pnpm db:generate`               | Gera o Prisma Client.                                               |
+| `pnpm db:migrate`                | Aplica migrations versionadas.                                      |
 
 ## Estrutura
 
@@ -101,15 +102,15 @@ pnpm security
 
 ## Identidade e tenant
 
-A API valida tokens `RS256` com `iss`, `sub`, `aud`, `exp` e `iat`. `(issuer, subject)` é resolvido por `UserIdentity`; empresa e papel são sempre consultados em `CompanyMembership`.
+A API valida access tokens Auth0 `RS256` por OIDC Discovery/JWKS. `(issuer, subject)` é resolvido por `UserIdentity`; empresa e papel são sempre consultados em `CompanyMembership`. O Next.js mantém sessão criptografada `HttpOnly` e atua como BFF.
 
-Para gerar um token efêmero sem endpoint ou chave privada versionada:
+Para vincular uma identidade autorizada:
 
 ```powershell
-corepack pnpm auth:issue-dev-token -- --issuer https://auth.local.sofia.test --audience sofia-api --subject dev-user-1
+corepack pnpm auth:link-identity -- --user-id <uuid> --confirm-user-id <uuid> --issuer <issuer> --subject <sub>
 ```
 
-Copie `publicKeyBase64` para `AUTH_JWT_PUBLIC_KEY_BASE64`. O subject precisa estar previamente associado a um usuário por `UserIdentity`; esta fase não cria endpoint de provisionamento.
+Consulte [a configuração Auth0](docs/operations/AUTH0_SETUP.md). Não há auto-provisionamento nem vínculo por e-mail.
 
 ## Contas a pagar — Fase 1A.2
 
@@ -127,11 +128,11 @@ Endpoints implementados:
 
 Criação, pagamento e estorno exigem `Idempotency-Key`. Edição e cancelamento exigem `expectedVersion`. Não há `DELETE`.
 
-A interface mínima está em `/companies/:companyId/payables`. Enquanto não existe login operacional, ela recebe um JWT válido e o mantém somente em memória. `MEMBER` consulta; `OWNER` e `ADMIN` também executam as mutações previstas. Consulte [o contrato da API e da interface](docs/architecture/PAYABLES_API.md).
+A interface autentica pelo Auth0, lista `/api/v1/me/companies` e navega para `/companies/:companyId/payables` sem expor tokens ao JavaScript. `MEMBER` consulta; `OWNER` e `ADMIN` também executam as mutações previstas. Consulte [o contrato da API e da interface](docs/architecture/PAYABLES_API.md).
 
 ## Limitações atuais
 
-- não há login, refresh token, revogação, MFA ou provisionamento público de identidade;
+- não há MFA, painel de usuários, auto-provisionamento ou Auth0 Organizations;
 - o tenant é validado no backend, mas ainda não há RLS no PostgreSQL;
 - não há contas a receber, calendário ou projeção;
 - contas a pagar não possuem pagamento parcial, parcelas, recorrência, juros, multa, desconto ou conciliação;

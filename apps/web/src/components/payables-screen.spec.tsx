@@ -35,25 +35,15 @@ function response(body: unknown, ok = true, status = 200) {
   return { json: async () => body, ok, status };
 }
 
-function authenticate(): void {
-  fireEvent.change(screen.getByLabelText("Token Bearer"), {
-    target: { value: "token" },
-  });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Continuar com segurança" }),
-  );
-}
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
 
 describe("PayablesScreen", () => {
-  it("does not persist or prefill a token", () => {
+  it("does not render or request a manual token", () => {
     render(<PayablesScreen companyId="company-1" />);
-    expect(screen.getByLabelText("Token Bearer")).toHaveValue("");
-    expect(screen.getByText(/somente nesta aba/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/token/i)).not.toBeInTheDocument();
   });
 
   it("shows loading and then an educational empty state", async () => {
@@ -68,7 +58,6 @@ describe("PayablesScreen", () => {
       ),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     expect(screen.getByLabelText("Carregando contas")).toBeInTheDocument();
     resolveFetch(
       response({
@@ -96,7 +85,6 @@ describe("PayablesScreen", () => {
       ),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     expect(await screen.findByText("Fornecedor Alfa")).toBeInTheDocument();
     expect(screen.getByText("BRL 1.250,50")).toBeInTheDocument();
     expect(screen.getByText("Vencida")).toBeInTheDocument();
@@ -116,7 +104,6 @@ describe("PayablesScreen", () => {
       ),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     await screen.findByText("Fornecedor Alfa");
     expect(
       screen.queryByRole("button", { name: "Nova conta" }),
@@ -136,7 +123,6 @@ describe("PayablesScreen", () => {
       ),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     await screen.findByText("Nenhuma conta encontrada");
     fireEvent.click(screen.getByRole("button", { name: "Nova conta" }));
     fireEvent.change(screen.getByLabelText("Valor"), {
@@ -158,10 +144,26 @@ describe("PayablesScreen", () => {
       vi.fn(async () => response({ message: "Unauthorized" }, false, 401)),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "token é inválido",
+      "sessão expirou",
     );
+    expect(
+      screen.getByRole("link", { name: "Entrar novamente" }),
+    ).toHaveAttribute("href", expect.stringContaining("/auth/login?returnTo="));
+  });
+
+  it("offers company reselection when the active membership was revoked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ message: "Not found" }, false, 404)),
+    );
+    render(<PayablesScreen companyId="company-removed" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "não possui acesso",
+    );
+    expect(
+      screen.getByRole("link", { name: "Selecionar outra empresa" }),
+    ).toHaveAttribute("href", "/companies");
   });
 
   it("supports stable next-page navigation", async () => {
@@ -185,7 +187,6 @@ describe("PayablesScreen", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     await screen.findByText("Fornecedor Alfa");
     fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
     await waitFor(() =>
@@ -214,7 +215,6 @@ describe("PayablesScreen", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     fireEvent.click(
       await screen.findByRole("button", { name: /Fornecedor Alfa/ }),
     );
@@ -242,7 +242,6 @@ describe("PayablesScreen", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     fireEvent.click(
       await screen.findByRole("button", { name: /Fornecedor Alfa/ }),
     );
@@ -298,7 +297,6 @@ describe("PayablesScreen", () => {
       ),
     );
     render(<PayablesScreen companyId="company-1" />);
-    authenticate();
     fireEvent.click(
       await screen.findByRole("button", { name: /Fornecedor Alfa/ }),
     );

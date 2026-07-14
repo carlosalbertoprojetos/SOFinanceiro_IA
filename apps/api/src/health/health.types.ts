@@ -1,9 +1,11 @@
-export type DatabaseHealth = {
-  status: "down" | "up";
+export type LivenessResult = {
+  service: "api";
+  status: "ok";
 };
 
-export type HealthResult = {
-  database: DatabaseHealth;
+export type ReadinessResult = {
+  authentication: { reason?: string; status: "down" | "up" };
+  database: { status: "down" | "up" };
   service: "api";
   status: "degraded" | "ok";
 };

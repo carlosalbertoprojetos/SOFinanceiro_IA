@@ -30,7 +30,7 @@ jobs:
     env:
       API_PORT: 3001
       DATABASE_URL: postgresql://sofia:sofia_ci@127.0.0.1:5432/sofia?schema=public
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+      API_INTERNAL_URL: http://localhost:3001
       TZ: America/Sao_Paulo
       WEB_ORIGIN: http://localhost:3000
     steps:
@@ -61,14 +61,16 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: |
-          AUTH_JWT_ALGORITHM=RS256 \
-          AUTH_JWT_AUDIENCE=sofia-api \
-          AUTH_JWT_ISSUER=https://auth.ci.sofia.test \
-          AUTH_JWT_PUBLIC_KEY_BASE64="$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | openssl pkey -pubout 2>/dev/null | base64 -w 0)" \
-          pnpm test
+        run: pnpm test
 
       - name: Build
+        env:
+          APP_BASE_URL: http://localhost:3000
+          AUTH0_AUDIENCE: https://api.sofia.local
+          AUTH0_CLIENT_ID: ci-only-client
+          AUTH0_CLIENT_SECRET: ci-only-not-a-secret
+          AUTH0_DOMAIN: ci.invalid
+          AUTH0_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
         run: pnpm build
 
       - name: Audit dependencies

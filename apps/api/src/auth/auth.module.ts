@@ -6,10 +6,12 @@ import { CompanyAccessService } from "./company-access.service";
 import { IdentityResolver } from "./identity-resolver.service";
 import { JoseTokenVerifier } from "./jose-token-verifier";
 import { JwtAuthenticationGuard } from "./jwt-authentication.guard";
+import { MeController } from "./me.controller";
 import { RoleAuthorizationGuard } from "./role-authorization.guard";
 import { TOKEN_VERIFIER } from "./token-verifier";
 
 @Module({
+  controllers: [MeController],
   exports: [
     AuthorizationPolicy,
     CompanyAccessGuard,

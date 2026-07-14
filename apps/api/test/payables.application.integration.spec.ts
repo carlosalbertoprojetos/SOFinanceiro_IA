@@ -1,6 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { exportSPKI, generateKeyPair } from "jose";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -44,14 +43,6 @@ describe("payables application", () => {
   });
 
   beforeAll(async () => {
-    const keyPair = await generateKeyPair("RS256");
-    const publicKey = await exportSPKI(keyPair.publicKey);
-    process.env.AUTH_JWT_ALGORITHM = "RS256";
-    process.env.AUTH_JWT_AUDIENCE = "sofia-api";
-    process.env.AUTH_JWT_ISSUER = "https://auth.payables.example.test";
-    process.env.AUTH_JWT_PUBLIC_KEY_BASE64 =
-      Buffer.from(publicKey).toString("base64");
-
     const { AppModule } = await import("../src/app.module");
     app = await NestFactory.create(AppModule, {
       abortOnError: false,

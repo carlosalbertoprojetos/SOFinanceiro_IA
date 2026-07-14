@@ -1,137 +1,82 @@
-# Identidade verificável, tenant e autorização
+# Identidade, sessão, tenant e autorização
 
-## Estado
-
-Esta documentação descreve a implementação da Fase 1A.1. Ela não cria autenticação de usuário final, tela de login ou permissões financeiras.
-
-## Fluxo protegido
+## Fluxo operacional
 
 ```text
-Authorization: Bearer <JWT>
-        |
-        v
-JwtAuthenticationGuard
-        |
-        +-- TokenVerifier: RS256, assinatura, iss, aud, exp e iat
-        |
-        +-- IdentityResolver: (issuer, subject) -> UserIdentity -> User
-        |
-        v
-CompanyAccessGuard
-        |
-        +-- companyId da rota + userId interno
-        +-- consulta CompanyMembership e papel atual
-        |
-        v
-RoleAuthorizationGuard
-        |
-        +-- AllowedRoles + AuthorizationPolicy
-        |
-        v
-Controller
+Browser -> Next.js/Auth0 SDK -> cookie de sessão criptografado HttpOnly
+        -> BFF Next.js -> access token Bearer -> NestJS
+        -> OIDC Discovery/JWKS -> (issuer, subject) -> UserIdentity
+        -> User -> CompanyMembership -> autorização
 ```
 
-O JWT não é autoridade para empresa ou papel. O papel é carregado de `CompanyMembership` em cada resolução de contexto.
+Auth0 autentica e mantém sessão. Não define empresa, papel ou permissão. O BFF
+desativa `/auth/access-token`; access e refresh tokens não ficam disponíveis ao
+JavaScript do navegador. ID token não é usado para acessar o NestJS.
 
-## Contratos
+## Validação OIDC/JWKS
 
-### `AuthenticatedPrincipal`
+A API aceita somente `RS256` e valida assinatura, `iss`, `sub`, `aud`, `exp` e
+`iat`. Discovery e JWKS são carregados do issuer configurado. Discovery e chaves
+são cacheados; `kid` desconhecido força atualização para suportar rotação.
 
-```typescript
-type AuthenticatedPrincipal = {
-  userId: string;
-  issuer: string;
-  subject: string;
-};
-```
+| Variável                       | Finalidade                                  |
+| ------------------------------ | ------------------------------------------- |
+| `AUTH0_ISSUER`                 | issuer exato, incluindo barra final         |
+| `AUTH0_AUDIENCE`               | identificador exclusivo da API SOFIA        |
+| `AUTH0_JWKS_CACHE_TTL_SECONDS` | validade fresca do JWKS; padrão 600 s       |
+| `AUTH0_JWKS_STALE_TTL_SECONDS` | limite de contingência do cache; padrão 1 h |
 
-### `TenantContext`
+Se o JWKS estiver indisponível, uma chave previamente validada pode ser usada
+somente até o limite stale. Sem chave confiável a API falha fechada. Não há
+download por requisição nem chave RSA estática no repositório.
 
-Contém `companyId`, `userId`, `membershipId` e `role`, todos derivados após autenticação e consulta ao banco.
+## Sessão Next.js
 
-### Claims obrigatórias
+O SDK oficial usa cookie criptografado `HttpOnly`, `SameSite=Lax` e `Secure` em
+produção. A sessão é rolling, expira após 24 horas de inatividade e possui limite
+absoluto de sete dias. O SDK valida state, nonce e PKCE quando aplicável. URLs de
+retorno externas ou protocol-relative são substituídas por `/companies`.
 
-- `iss`;
-- `sub`;
-- `aud`;
-- `exp`;
-- `iat`.
+As variáveis `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`,
+`AUTH0_SECRET`, `APP_BASE_URL` e `API_INTERNAL_URL` são exclusivas do servidor.
+Nenhum segredo usa prefixo `NEXT_PUBLIC_`.
 
-O único algoritmo aceito inicialmente é `RS256`. Tokens sem assinatura, com algoritmo diferente, malformados, expirados ou emitidos no futuro são rejeitados.
+## Identidade e provisionamento
 
-## Configuração
+`UserIdentity` associa `(issuer, subject)` a um `User`. E-mail e nome podem mudar
+no Auth0 sem alterar a identidade. Login sem vínculo retorna
+`IDENTITY_NOT_PROVISIONED`; não cria usuário, empresa ou membership.
 
-| Variável                     | Finalidade                                      |
-| ---------------------------- | ----------------------------------------------- |
-| `AUTH_JWT_ALGORITHM`         | deve ser `RS256`                                |
-| `AUTH_JWT_ISSUER`            | issuer exato aceito                             |
-| `AUTH_JWT_AUDIENCE`          | audience exata da API                           |
-| `AUTH_JWT_PUBLIC_KEY_BASE64` | chave pública RSA SPKI/PEM codificada em base64 |
-
-A API inteira, inclusive o health check, falha na inicialização quando a configuração obrigatória não existe ou a chave não é RSA válida. O comportamento fail-fast é intencional: esta fase não admite operação parcial sem o limite de autenticação configurado. A chave privada não pertence ao repositório nem à API.
-
-A implementação inicial usa uma chave pública estática. Rotação exige atualizar a configuração e reiniciar a API de forma coordenada. JWKS remoto fica adiado até existir um emissor operacional que o justifique.
-
-## Identidades externas
-
-`UserIdentity` associa `(issuer, subject)` a um `User` interno. O par é único e o mesmo subject pode existir em issuers diferentes.
-
-O FK usa `ON DELETE RESTRICT`: um usuário com identidade não pode ser removido silenciosamente. A desativação ou remoção futura deverá ser um fluxo administrativo explícito. E-mail nunca é usado como prova de identidade.
-
-Não existe endpoint público, seed de identidade real ou auto-provisionamento.
-
-## Tenant e enumeração
-
-Rotas protegidas usam:
-
-```text
-/api/v1/companies/:companyId/...
-```
-
-O `companyId` é somente uma seleção. O backend exige membership do usuário autenticado. Empresa inexistente e empresa existente sem acesso produzem a mesma resposta `404`, evitando revelar outro tenant.
-
-## Autorização
-
-`AllowedRoles` declara papéis autorizados e `RoleAuthorizationGuard` usa `AuthorizationPolicy` sobre o papel atual do banco. Ausência de declaração ou de contexto validado é negada por padrão.
-
-A rota temporária `access-check` foi removida na Fase 1A.2 quando os primeiros endpoints reais passaram a validar autenticação, tenant e papéis.
-
-## Token local efêmero
-
-O projeto oferece um comando CLI, sem endpoint e desabilitado quando `NODE_ENV=production`:
+Para vincular uma identidade a um usuário interno existente:
 
 ```powershell
-corepack pnpm auth:issue-dev-token -- --issuer https://auth.local.sofia.test --audience sofia-api --subject dev-user-1
+corepack pnpm auth:link-identity -- --user-id <uuid> --confirm-user-id <uuid> --issuer <issuer-exato> --subject <sub-exato>
 ```
 
-O comando gera um par RSA somente em memória e imprime:
+O comando exige confirmação repetida do UUID, usa parâmetros SQL, é idempotente
+para o mesmo vínculo e rejeita identidade já ligada a outro usuário. Execute-o
+somente em terminal administrativo com `DATABASE_URL` do ambiente correto.
 
-- token com validade entre 60 e 3600 segundos;
-- chave pública base64 para configurar a API;
-- duração do token.
+## Empresas e autorização
 
-A chave privada não é impressa nem persistida. Para o acesso funcionar, deve existir previamente uma `UserIdentity` correspondente no banco; provisionamento administrativo permanece fora do escopo.
+`GET /api/v1/me/companies` não recebe `userId` e retorna somente `id`, `name`,
+`currencyCode`, `timezone` e o papel atual vindo de `CompanyMembership`. A
+preferência de empresa é cookie `HttpOnly` do BFF e não concede acesso. Toda rota
+`/api/v1/companies/:companyId/...` consulta a membership novamente; vínculo
+removido deixa de autorizar imediatamente.
 
-## Testes sem bypass
+## Health
 
-Testes JWT geram pares RSA efêmeros. O teste HTTP inicializa a aplicação real com a chave pública do teste e assina tokens com a chave privada mantida somente em memória.
+- `GET /health/live`: processo ativo, sem banco ou Auth0;
+- `GET /health/ready`: banco, issuer/audience e inicialização local do verifier.
 
-Não existe provider de bypass registrado em `AppModule`, identidade por `X-User-ID`, seleção por `X-Company-ID` ou segredo padrão.
+Configuração OIDC ausente permite liveness, mas readiness retorna `503` e rotas
+protegidas falham fechadas. Readiness não consulta Auth0 em cada chamada.
 
-## Rollback
+## Testes e rollback
 
-A migration é aditiva. Antes de dados reais, uma base descartável pode ser recriada. Depois de identidades persistidas:
+Testes criam chaves RSA efêmeras e um OIDC/JWKS local, sem internet, tenant ou
+credenciais reais. Não existe bypass de identidade em `AppModule`.
 
-- reverter a aplicação sem remover `UserIdentity`;
-- não executar down migration destrutiva;
-- corrigir schema por migration posterior;
-- preservar o vínculo entre issuer, subject e usuário.
-
-## Limitações e riscos residuais
-
-- não há login, logout, refresh token, revogação ou MFA;
-- não há JWKS nem rotação sem restart;
-- não há provisionamento administrativo de identidade;
-- não há cache de membership nem RLS;
-- `iat` depende de relógios sincronizados;
-- a seleção do emissor operacional e gestão de chaves continuam decisões de implantação.
+Rollback preserva `UserIdentity`, `CompanyMembership` e dados financeiros. O
+token manual não retorna à produção. Consulte ADR-005 e ADR-007.

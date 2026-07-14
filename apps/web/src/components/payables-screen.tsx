@@ -9,9 +9,14 @@ import {
   useState,
 } from "react";
 
-import { type Payable, SofiaApiClient, userMessage } from "../lib/api-client";
+import {
+  ApiError,
+  type Payable,
+  SofiaApiClient,
+  userMessage,
+} from "../lib/api-client";
 
-type Props = { companyId: string };
+type Props = { companyId: string; companyName?: string; userName?: string };
 type Editor = "create" | "edit" | null;
 type Action = "pay" | "reverse" | "cancel" | null;
 type FormData = {
@@ -46,14 +51,17 @@ function formatDate(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
-export function PayablesScreen({ companyId }: Props): React.JSX.Element {
-  const [token, setToken] = useState("");
-  const [draftToken, setDraftToken] = useState("");
+export function PayablesScreen({
+  companyId,
+  companyName,
+  userName = "Usuário",
+}: Props): React.JSX.Element {
   const [items, setItems] = useState<Payable[]>([]);
   const [selected, setSelected] = useState<Payable | null>(null);
   const [canMutate, setCanMutate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [recovery, setRecovery] = useState<"companies" | "login" | null>(null);
   const [notice, setNotice] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -74,13 +82,22 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [logicalKey, setLogicalKey] = useState(() => crypto.randomUUID());
   const panelRef = useRef<HTMLElement>(null);
-  const client = useMemo(
-    () => (token ? new SofiaApiClient(token) : null),
-    [token],
-  );
+  const client = useMemo(() => new SofiaApiClient(), []);
+
+  const reportError = useCallback((cause: unknown): void => {
+    setError(userMessage(cause));
+    setRecovery(
+      cause instanceof ApiError
+        ? cause.status === 401
+          ? "login"
+          : cause.status === 404
+            ? "companies"
+            : null
+        : null,
+    );
+  }, []);
 
   const load = useCallback(async () => {
-    if (!client) return;
     setLoading(true);
     setError("");
     const params = new URLSearchParams();
@@ -97,11 +114,11 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
       setNextCursor(result.nextCursor);
       setCanMutate(result.permissions.canMutate);
     } catch (cause) {
-      setError(userMessage(cause));
+      reportError(cause);
     } finally {
       setLoading(false);
     }
-  }, [client, companyId, cursor, filters]);
+  }, [client, companyId, cursor, filters, reportError]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- remote query synchronization
@@ -112,7 +129,6 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
   }, [editor, action, selected]);
 
   async function openDetail(id: string): Promise<void> {
-    if (!client) return;
     setLoading(true);
     setError("");
     try {
@@ -122,7 +138,7 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
       setEditor(null);
       setAction(null);
     } catch (cause) {
-      setError(userMessage(cause));
+      reportError(cause);
     } finally {
       setLoading(false);
     }
@@ -142,7 +158,7 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
 
   async function save(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!client || !validateForm() || submitting) return;
+    if (!validateForm() || submitting) return;
     setSubmitting(true);
     setError("");
     const body = { ...form, documentNumber: form.documentNumber || null };
@@ -165,7 +181,7 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
         await openDetail(selected.id);
       }
     } catch (cause) {
-      setError(userMessage(cause));
+      reportError(cause);
     } finally {
       setSubmitting(false);
     }
@@ -202,7 +218,7 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
 
   async function confirmAction(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!client || !selected || !actionValue.trim() || submitting) return;
+    if (!selected || !actionValue.trim() || submitting) return;
     setSubmitting(true);
     setError("");
     try {
@@ -234,7 +250,7 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
       await load();
       await openDetail(selected.id);
     } catch (cause) {
-      setError(userMessage(cause));
+      reportError(cause);
     } finally {
       setSubmitting(false);
     }
@@ -252,44 +268,6 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
       </main>
     );
 
-  if (!token)
-    return (
-      <main className="auth-shell">
-        <section className="access-panel" aria-labelledby="access-title">
-          <div>
-            <span className="brand-mark" aria-hidden="true">
-              S
-            </span>
-            <p className="product-name">SOFIA</p>
-          </div>
-          <h1 id="access-title">Acesse as contas a pagar</h1>
-          <p>
-            Informe um token válido. Ele será mantido somente nesta aba e não
-            será salvo pelo navegador.
-          </p>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (draftToken.trim()) setToken(draftToken.trim());
-            }}
-          >
-            <label htmlFor="access-token">Token Bearer</label>
-            <textarea
-              id="access-token"
-              value={draftToken}
-              onChange={(event) => setDraftToken(event.target.value)}
-              required
-              rows={5}
-              autoComplete="off"
-            />
-            <button className="primary-button" type="submit">
-              Continuar com segurança
-            </button>
-          </form>
-        </section>
-      </main>
-    );
-
   return (
     <main className="payables-shell">
       <header className="app-header">
@@ -301,17 +279,13 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
         </a>
         <div>
           <span className="company-context">Empresa selecionada</span>
+          {companyName && <strong>{companyName}</strong>}
           <code>{companyId}</code>
         </div>
-        <button
-          className="text-button"
-          onClick={() => {
-            setToken("");
-            setItems([]);
-          }}
-        >
-          Encerrar sessão
-        </button>
+        <span>{userName}</span>
+        <a className="text-button" href="/auth/logout">
+          Sair
+        </a>
       </header>
       <section className="page-heading">
         <div>
@@ -340,6 +314,16 @@ export function PayablesScreen({ companyId }: Props): React.JSX.Element {
       {error && (
         <div className="feedback error" role="alert">
           {error}
+          {recovery === "login" && (
+            <a
+              href={`/auth/login?returnTo=${encodeURIComponent(`/companies/${companyId}/payables`)}`}
+            >
+              Entrar novamente
+            </a>
+          )}
+          {recovery === "companies" && (
+            <a href="/companies">Selecionar outra empresa</a>
+          )}
           <button aria-label="Fechar erro" onClick={() => setError("")}>
             ×
           </button>

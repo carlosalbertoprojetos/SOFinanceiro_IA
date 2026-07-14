@@ -22,7 +22,10 @@ export class IdentityResolver {
     });
 
     if (!userIdentity) {
-      throw new UnauthorizedException("Authentication required");
+      throw new UnauthorizedException({
+        code: "IDENTITY_NOT_PROVISIONED",
+        message: "Seu acesso ainda não foi provisionado",
+      });
     }
 
     return {

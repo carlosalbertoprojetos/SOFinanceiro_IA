@@ -1,20 +1,21 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 
 import { HealthService } from "./health.service";
-import type { HealthResult } from "./health.types";
+import type { LivenessResult, ReadinessResult } from "./health.types";
 
 @Controller("health")
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
-  @Get()
-  async getHealth(): Promise<HealthResult> {
-    const result = await this.healthService.check();
+  @Get("live")
+  live(): LivenessResult {
+    return this.healthService.live();
+  }
 
-    if (result.status !== "ok") {
-      throw new ServiceUnavailableException(result);
-    }
-
+  @Get("ready")
+  async ready(): Promise<ReadinessResult> {
+    const result = await this.healthService.ready();
+    if (result.status !== "ok") throw new ServiceUnavailableException(result);
     return result;
   }
 }

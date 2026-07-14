@@ -1,37 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { TokenVerifier } from "../auth/token-verifier";
 import type { PrismaService } from "../database/prisma.service";
 import { HealthService } from "./health.service";
 
-function createPrismaMock(query: () => Promise<unknown>): PrismaService {
+function prisma(query: () => Promise<unknown>): PrismaService {
+  return { $queryRaw: vi.fn(query) } as unknown as PrismaService;
+}
+
+function verifier(configured: boolean): TokenVerifier {
   return {
-    $queryRaw: vi.fn(query),
-  } as unknown as PrismaService;
+    readiness: () =>
+      configured
+        ? { configured: true }
+        : { configured: false, reason: "missing" },
+    verify: vi.fn(),
+  };
 }
 
 describe("HealthService", () => {
-  it("reports the application and database as available", async () => {
+  it("liveness has no database or OIDC dependency", () => {
     const service = new HealthService(
-      createPrismaMock(async () => [{ result: 1 }]),
+      prisma(async () => Promise.reject()),
+      verifier(false),
     );
+    expect(service.live()).toEqual({ service: "api", status: "ok" });
+  });
 
-    await expect(service.check()).resolves.toEqual({
+  it("reports ready when database and verifier configuration are available", async () => {
+    const service = new HealthService(
+      prisma(async () => [{ result: 1 }]),
+      verifier(true),
+    );
+    await expect(service.ready()).resolves.toEqual({
+      authentication: { status: "up" },
       database: { status: "up" },
       service: "api",
       status: "ok",
     });
   });
 
-  it("reports a degraded state when the database is unavailable", async () => {
+  it("reports degraded without OIDC configuration", async () => {
     const service = new HealthService(
-      createPrismaMock(async () =>
-        Promise.reject(new Error("database unavailable")),
-      ),
+      prisma(async () => [{ result: 1 }]),
+      verifier(false),
     );
-
-    await expect(service.check()).resolves.toEqual({
-      database: { status: "down" },
-      service: "api",
+    await expect(service.ready()).resolves.toMatchObject({
+      authentication: { reason: "missing", status: "down" },
       status: "degraded",
     });
   });

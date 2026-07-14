@@ -35,7 +35,8 @@ Carregando, vazio, sucesso, validação, conflito, sem autenticação, sem acess
 ## Padrões de interação
 
 - empresa é explícita na rota;
-- token de desenvolvimento permanece somente em memória e nunca é versionado ou persistido pelo navegador;
+- autenticação usa sessão Auth0 criptografada em cookie `HttpOnly`; access e refresh tokens não ficam disponíveis ao JavaScript;
+- empresa ativa é preferência de navegação, nunca concessão de acesso, e o backend revalida a membership;
 - criação, pagamento e estorno mantêm uma chave idempotente estável por tentativa lógica;
 - edição informa conflito de versão e nunca sobrescreve silenciosamente;
 - pagamento solicita apenas data e confirmação;
@@ -47,6 +48,6 @@ Carregando, vazio, sucesso, validação, conflito, sem autenticação, sem acess
 
 ERP antigo, densidade excessiva, excesso de tabelas e divisórias, dashboards decorativos, gráficos sem ação, cores neon ou saturadas, gamificação, aparência bancária ou contábil genérica, jargão, excesso de modais, cor como único indicador, números fictícios apresentados como reais e abstrações que escondam vencimento, valor, favorecido ou status.
 
-## Limites da Fase 1A.3
+## Limites da Fase 1A.4
 
-Somente consulta e interface mínima de contas a pagar. Não inclui calendário, timeline financeira, projeção, saldo, contas bancárias, contas a receber, fornecedores estruturados, categorias, centros de custo, anexos, pagamento parcial, parcelamento, recorrência, juros, multa, desconto, contratos, conciliação, cobrança, notificações, gráficos, dashboard ou IA.
+Autenticação operacional, sessão, provisionamento explícito e seleção de empresa sobre a interface existente. Não inclui Auth0 Organizations, gestão completa de usuários, calendário, timeline financeira, projeção, saldo, contas bancárias, contas a receber, fornecedores estruturados, categorias, centros de custo, anexos, pagamento parcial, parcelamento, recorrência, juros, multa, desconto, contratos, conciliação, cobrança, notificações, gráficos, dashboard ou IA.
